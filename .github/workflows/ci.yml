@@ -1,0 +1,88 @@
+name: AetherDB CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  test:
+    name: Test & Correctness Verification
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry & index
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check code formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy Lints
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run Workspace Tests & Chaos Fuzzers
+        run: cargo test --workspace --verbose
+
+  benchmarks:
+    name: Run Micro-Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run AetherDB Empirical Benchmark Suite
+        run: cargo run --release --bin aether-bench -- --records 50000
+
+  sdk-tests:
+    name: JavaScript & Python SDK Integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Start AetherDB Server in Background
+        run: |
+          cargo run --release --bin aether-server -- --node-id 1 --addr 127.0.0.1:8300 --data-dir ./ci_data &
+          sleep 3
+
+      - name: Test JavaScript SDK & Agent Memory Demo
+        run: |
+          node examples/ai_agent_memory_demo.js
+
+      - name: Test Python SDK
+        run: |
+          cd sdks/python
+          pip install .
+          python -c "from aetherdb import AetherDB; db = AetherDB(); assert db.set('ci_key', 'ci_val')['status'] == 'ok'; assert db.get('ci_key')['value'] == 'ci_val'"

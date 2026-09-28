@@ -1,0 +1,28 @@
+/target
+**/*.rs.bk
+Cargo.lock
+
+# Data directories
+data_node*
+ci_data
+*.db
+*.wal
+*.sst
+
+# Node / JS
+node_modules/
+package-lock.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# IDE & OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,19 @@
+[package]
+name = "aether-network"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+aether-core = { path = "../aether-core" }
+aether-storage = { path = "../aether-storage" }
+aether-txn = { path = "../aether-txn" }
+aether-multiraft = { path = "../aether-multiraft" }
+bytes.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+bincode.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

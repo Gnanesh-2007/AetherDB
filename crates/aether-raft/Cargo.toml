@@ -1,0 +1,19 @@
+[package]
+name = "aether-raft"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+aether-core = { path = "../aether-core" }
+aether-storage = { path = "../aether-storage" }
+bytes.workspace = true
+tokio.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+bincode.workspace = true
+thiserror.workspace = true
+rand.workspace = true
+tracing.workspace = true
+async-trait.workspace = true

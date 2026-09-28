@@ -1,0 +1,21 @@
+[package]
+name = "aether-bench"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "aether-bench"
+path = "src/main.rs"
+
+[dependencies]
+aether-core = { path = "../aether-core" }
+aether-storage = { path = "../aether-storage" }
+aether-txn = { path = "../aether-txn" }
+aether-simd = { path = "../aether-simd" }
+aether-network = { path = "../aether-network" }
+tokio.workspace = true
+clap.workspace = true
+rand.workspace = true
+tempfile.workspace = true

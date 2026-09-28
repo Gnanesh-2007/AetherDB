@@ -1,0 +1,18 @@
+[package]
+name = "aether-chaos"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+aether-core = { path = "../aether-core" }
+aether-storage = { path = "../aether-storage" }
+aether-raft = { path = "../aether-raft" }
+aether-multiraft = { path = "../aether-multiraft" }
+aether-txn = { path = "../aether-txn" }
+aether-network = { path = "../aether-network" }
+tokio.workspace = true
+rand.workspace = true
+tracing.workspace = true
+tempfile.workspace = true

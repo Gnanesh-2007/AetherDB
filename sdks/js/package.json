@@ -1,0 +1,10 @@
+{
+  "name": "@aetherdb/sdk",
+  "version": "0.1.0",
+  "description": "Unified TypeScript / JavaScript Client SDK for AetherDB (KV + Vector + Atomic State)",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "keywords": ["database", "vector", "cache", "ai", "agents", "serverless"],
+  "author": "AetherDB Team",
+  "license": "MIT"
+}
