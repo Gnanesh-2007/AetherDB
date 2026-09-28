@@ -205,9 +205,11 @@ impl StorageEngine {
             if k.starts_with(b"__vec:") {
                 if let ValueState::Some(bytes) = v {
                     if let Ok((vec, meta)) = bincode::deserialize::<(Vec<f32>, Option<String>)>(&bytes) {
-                        let id = String::from_utf8_lossy(&k[6..]).to_string();
-                        let score = aether_simd::cosine_similarity(query_vector, &vec);
-                        candidates.push((id, score, meta));
+                        if query_vector.len() == vec.len() {
+                            let id = String::from_utf8_lossy(&k[6..]).to_string();
+                            let score = aether_simd::cosine_similarity(query_vector, &vec);
+                            candidates.push((id, score, meta));
+                        }
                     }
                 }
             }

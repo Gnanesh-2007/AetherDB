@@ -2,7 +2,9 @@
 
 /// Calculates dot product of two f32 vectors with chunked loop unrolling for SIMD vectorization.
 pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
-    assert_eq!(a.len(), b.len(), "Vector dimensions must match");
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
 
     let len = a.len();
     let chunks = len / 8;
@@ -41,7 +43,9 @@ pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
 
 /// Calculates squared Euclidean distance (L2 norm squared) between two f32 vectors.
 pub fn l2_distance_squared(a: &[f32], b: &[f32]) -> f32 {
-    assert_eq!(a.len(), b.len(), "Vector dimensions must match");
+    if a.len() != b.len() {
+        return f32::MAX;
+    }
 
     let len = a.len();
     let chunks = len / 8;
@@ -91,6 +95,10 @@ pub fn l2_distance_squared(a: &[f32], b: &[f32]) -> f32 {
 /// Calculates Cosine Similarity between two f32 vectors.
 /// Range: [-1.0, 1.0] where 1.0 means identical orientation.
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+
     let dot = dot_product(a, b);
     let norm_a = dot_product(a, a).sqrt();
     let norm_b = dot_product(b, b).sqrt();
@@ -121,5 +129,9 @@ mod tests {
 
         let c = vec![0.0, 1.0, 0.0];
         assert!((cosine_similarity(&a, &c) - 0.0).abs() < 1e-6);
+
+        // Mismatched lengths should return 0.0 safely without panic
+        let d = vec![1.0, 0.0];
+        assert_eq!(cosine_similarity(&a, &d), 0.0);
     }
 }

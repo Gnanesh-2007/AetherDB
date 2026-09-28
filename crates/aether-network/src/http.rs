@@ -631,48 +631,69 @@ const DEVTOOLS_HTML: &str = r#"<!DOCTYPE html>
       const id = document.getElementById('vecId').value || 'vec_' + Date.now();
       const raw = document.getElementById('vecFloats').value || '[0.91, 0.12, 0.05, -0.15, 0.33, 0.04, 0.11]';
       let vector;
-      try { vector = JSON.parse(raw); } catch { return alert('Invalid vector array'); }
-      const res = await fetch('/v1/vector/upsert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, vector, metadata: JSON.stringify({ source: 'devtools_web' }) })
-      });
-      const data = await res.json();
-      alert('Vector Upserted: ' + JSON.stringify(data));
-      updateTelemetry();
+      try {
+        vector = JSON.parse(raw);
+        if (!Array.isArray(vector)) throw new Error('Must be array');
+      } catch {
+        return alert('Invalid vector array. Format: [0.1, 0.2, ...]');
+      }
+      try {
+        const res = await fetch('/v1/vector/upsert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, vector, metadata: JSON.stringify({ source: 'devtools_web' }) })
+        });
+        const data = await res.json();
+        const container = document.getElementById('vecResults');
+        container.innerHTML = `<div class="p-2 bg-emerald-950/50 border border-emerald-800 rounded text-xs text-emerald-400">✓ Vector "${id}" (${vector.length} dims) upserted successfully.</div>`;
+        updateTelemetry();
+      } catch (err) {
+        alert('Upsert failed: ' + err.message);
+      }
     }
 
     async function handleVecSearch() {
       const raw = document.getElementById('vecFloats').value || '[0.91, 0.12, 0.05, -0.15, 0.33, 0.04, 0.11]';
       let vector;
-      try { vector = JSON.parse(raw); } catch { return alert('Invalid vector array'); }
-      const res = await fetch('/v1/vector/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vector, top_k: 3 })
-      });
-      const data = await res.json();
-      const container = document.getElementById('vecResults');
-      container.innerHTML = '';
-      (data.results || []).forEach((r, idx) => {
-        const div = document.createElement('div');
-        div.className = 'p-2.5 bg-slate-950 border border-slate-800 rounded-lg flex justify-between items-center text-xs';
-        div.innerHTML = `
-          <div>
-            <div class="font-semibold text-white mono">${r.id}</div>
-            <div class="text-slate-400 text-[10px]">Rank #${idx+1}</div>
-          </div>
-          <div class="text-right">
-            <span class="mono text-cyan-400 font-bold">${(r.score * 100).toFixed(2)}%</span>
-            <div class="text-[10px] text-slate-500">Cosine Match</div>
-          </div>
-        `;
-        container.appendChild(div);
-      });
-      if (!data.results || data.results.length === 0) {
-        container.innerHTML = '<div class="text-xs text-slate-500 p-2">No vectors indexed yet. Upsert one above!</div>';
+      try {
+        vector = JSON.parse(raw);
+        if (!Array.isArray(vector)) throw new Error('Must be array');
+      } catch {
+        return alert('Invalid vector array. Format: [0.1, 0.2, ...]');
       }
-      updateTelemetry();
+      const container = document.getElementById('vecResults');
+      container.innerHTML = '<div class="text-[11px] text-slate-400 p-1">Searching vectors...</div>';
+      try {
+        const res = await fetch('/v1/vector/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vector, top_k: 5 })
+        });
+        const data = await res.json();
+        container.innerHTML = '';
+        if (data.results && data.results.length > 0) {
+          data.results.forEach((r, idx) => {
+            const div = document.createElement('div');
+            div.className = 'p-2.5 bg-slate-950 border border-slate-800 rounded-lg flex justify-between items-center text-xs';
+            div.innerHTML = `
+              <div>
+                <div class="font-semibold text-white mono">${r.id}</div>
+                <div class="text-slate-400 text-[10px]">Rank #${idx+1}</div>
+              </div>
+              <div class="text-right">
+                <span class="mono text-cyan-400 font-bold">${(r.score * 100).toFixed(2)}%</span>
+                <div class="text-[10px] text-slate-500">Cosine Match</div>
+              </div>
+            `;
+            container.appendChild(div);
+          });
+        } else {
+          container.innerHTML = '<div class="text-xs text-slate-500 p-2">No matching vectors found with dimension ' + vector.length + '. Upsert a vector with this dimension first!</div>';
+        }
+        updateTelemetry();
+      } catch (err) {
+        container.innerHTML = `<div class="p-2 bg-rose-950/50 border border-rose-800 rounded text-xs text-rose-400">Search error: ${err.message}</div>`;
+      }
     }
   </script>
 </body>
