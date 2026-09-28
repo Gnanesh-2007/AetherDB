@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_addr = args.http_addr.unwrap_or_else(|| {
         SocketAddr::new(args.addr.ip(), args.addr.port() + 1)
     });
-    let http_server = aether_network::HttpServer::new(http_addr, storage.clone());
+    let http_server = aether_network::HttpServer::new(http_addr, args.node_id, storage.clone());
     tokio::spawn(async move {
         if let Err(e) = http_server.run().await {
             tracing::error!("HTTP Gateway error: {}", e);

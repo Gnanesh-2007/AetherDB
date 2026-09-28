@@ -37,6 +37,12 @@ pub enum AetherError {
 
     #[error("Serialization error: {0}")]
     SerializationError(String),
+
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("Rate limit exceeded: {0}")]
+    RateLimitExceeded(String),
 }
 
 pub type Result<T> = std::result::Result<T, AetherError>;
