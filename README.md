@@ -62,6 +62,7 @@
 | **`aether-cli`** | [`crates/aether-cli`](crates/aether-cli) | Interactive cluster REPL shell with administrative tooling |
 | **`aether-chaos`** | [`crates/aether-chaos`](crates/aether-chaos) | Jepsen-style linearizability checker & fault-injection harness |
 | **`aether-bench`** | [`crates/aether-bench`](crates/aether-bench) | Micro-benchmark suite capturing exact latency percentiles ($p50/p90/p99$) |
+| **`aether-cloud`** | [`crates/aether-cloud`](crates/aether-cloud) | Managed SaaS Control Plane, API key lifecycle, usage metering, and developer portal |
 
 ---
 
@@ -188,28 +189,49 @@ Features:
 
 ---
 
+## ☁️ AetherCloud Control Plane & SaaS Portal (Phase 6)
+
+AetherCloud provides a turnkey developer SaaS control plane for self-service tenant provisioning, API key management, real-time usage metering, and automated pay-as-you-go billing:
+
+```bash
+# Start the AetherCloud Control Plane
+cargo run --release --bin aether-cloud -- --addr 127.0.0.1:8400
+```
+
+Open the developer portal at:
+```
+http://localhost:8400
+```
+
+### SaaS Platform Features:
+1. **API Key Lifecycle**:
+   * Generate cryptographically random secret keys (`aether_sk_live_<tenant>_<entropy>`).
+   * Granular permission scopes (`read`, `write`, `admin`) and instant revocation.
+2. **Real-Time Quota & Usage Metering**:
+   * Visual progress gauges tracking monthly operations ($0.9\%$), vector embeddings ($0.1\%$), and storage limits.
+   * Plan tier enforcement: Free ($100\text{K ops/mo}$) vs. Pro ($10\text{M ops/mo}$).
+3. **Transparent Billing Engine**:
+   * Live pro-rated monthly invoices calculating transactional KV costs ($\$0.20/100\text{K ops}$), vector queries ($\$0.40/100\text{K}$), and SSD storage ($\$0.10/\text{GB}$).
+
+---
+
 ## 🐳 Docker Multi-Node Cluster Setup
 
-Spin up a 3-node distributed AetherDB cluster with Docker Compose:
+Spin up a 3-node distributed AetherDB cluster + AetherCloud Control Plane with Docker Compose:
 
 ```bash
 docker compose up -d
 ```
 
-Cluster topology:
+Topology:
+* **AetherCloud Portal:** `http://localhost:8400`
 * **Node 1:** TCP `8300`, HTTP `8301`
 * **Node 2:** TCP `8310`, HTTP `8311`
 * **Node 3:** TCP `8320`, HTTP `8321`
-
-Check cluster health:
-```bash
-curl http://localhost:8301/health
-curl http://localhost:8311/health
-curl http://localhost:8321/health
-```
 
 ---
 
 ## 📜 License
 
 Licensed under the [Apache License, Version 2.0](LICENSE).
+

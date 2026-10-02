@@ -20,7 +20,7 @@ COPY crates ./crates
 
 # Build release binaries with native CPU SIMD optimization flags
 ENV RUSTFLAGS="-C target-cpu=native"
-RUN cargo build --release --bin aether-server --bin aether-cli --bin aether-bench
+RUN cargo build --release --bin aether-server --bin aether-cli --bin aether-bench --bin aether-cloud
 
 # ------------------------------------------------------------------------------
 # Runtime Image
@@ -38,9 +38,10 @@ WORKDIR /app
 COPY --from=builder /usr/src/aetherdb/target/release/aether-server /usr/local/bin/aether-server
 COPY --from=builder /usr/src/aetherdb/target/release/aether-cli /usr/local/bin/aether-cli
 COPY --from=builder /usr/src/aetherdb/target/release/aether-bench /usr/local/bin/aether-bench
+COPY --from=builder /usr/src/aetherdb/target/release/aether-cloud /usr/local/bin/aether-cloud
 
-# Expose TCP Binary protocol (8300) and HTTP REST Gateway / DevTools (8301)
-EXPOSE 8300 8301
+# Expose TCP Binary protocol (8300), HTTP REST Gateway (8301), and AetherCloud Control Plane (8400)
+EXPOSE 8300 8301 8400
 
 # Create default data directory volume
 RUN mkdir -p /app/data

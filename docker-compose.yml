@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  aether-cloud:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aether-cloud
+    entrypoint: ["aether-cloud"]
+    command: ["--addr", "0.0.0.0:8400"]
+    ports:
+      - "8400:8400"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8400/cloud/v1/projects"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - aether-net
+
   aether-node-1:
     build:
       context: .

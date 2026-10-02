@@ -72,17 +72,20 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Start AetherDB Server in Background
+      - name: Start AetherDB Server & AetherCloud in Background
         run: |
           cargo run --release --bin aether-server -- --node-id 1 --addr 127.0.0.1:8300 --data-dir ./ci_data &
+          cargo run --release --bin aether-cloud -- --addr 127.0.0.1:8400 &
           sleep 3
 
       - name: Test JavaScript SDK & Agent Memory Demo
         run: |
           node examples/ai_agent_memory_demo.js
 
-      - name: Test Python SDK
+      - name: Test Python SDK & AetherCloud Control Plane
         run: |
           cd sdks/python
           pip install .
           python -c "from aetherdb import AetherDB; db = AetherDB(); assert db.set('ci_key', 'ci_val')['status'] == 'ok'; assert db.get('ci_key')['value'] == 'ci_val'"
+          curl -f http://localhost:8400/cloud/v1/usage
+          curl -f http://localhost:8400/cloud/v1/billing

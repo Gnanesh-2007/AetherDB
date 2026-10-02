@@ -12,6 +12,7 @@ members = [
     "crates/aether-cli",
     "crates/aether-chaos",
     "crates/aether-bench",
+    "crates/aether-cloud",
 ]
 
 [workspace.package]
