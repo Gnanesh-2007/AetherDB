@@ -27,7 +27,7 @@ AetherDB v0.1.0 has been deployed and validated in a live public environment ove
 - **Crash & Restart Resilience:** Validated against a clean production storage directory (`data_production`). State, atomic counters, semantic memories, and SIMD vectors survive full process restarts.
 - **Protected Metrics & CORS:** Internal Prometheus `/metrics` are inaccessible without valid authentication, and wildcard CORS policies (`*`) are disallowed under strict mode.
 
-> **Latency Notice:** Public external roundtrips over TLS reverse proxies showed `p50 = 1,445 ms`, `p95 = 3,475 ms`, and `max = 6,019 ms`. These figures reflect wide-area network latency and TLS handshakes, whereas local engine benchmarks achieve sub-millisecond execution (`p50 = 42 µs` for LSM writes).
+> **Latency Notice:** Public external roundtrips over TLS reverse proxies showed `p50 = 1,445 ms`, `p95 = 3,475 ms`, and `max = 6,019 ms`. These figures reflect wide-area network latency and TLS handshakes, whereas local engine benchmarks achieve sub-millisecond execution (`p50 = 0.031 ms` / `31 µs` for WAL + MemTable writes).
 
 ---
 
@@ -36,7 +36,7 @@ AetherDB v0.1.0 has been deployed and validated in a live public environment ove
 Standard web architectures separate databases, vector indices, cache tiers, and task queues across different systems. Autonomous AI agents have unique requirements that break down when using disparate infrastructure:
 
 1. **Epistemic State vs. Ephemeral Caches:** Agents need structured scratchpad memory and step checkpoints that survive process crashes and orchestrator restarts.
-2. **Lock-Free Atomic Accounting:** Tracking token quotas, step counters, and microcents across concurrent tools requires hardware-atomic INCR primitives without database lock contention.
+2. **Atomic Concurrent Accounting:** Tracking token quotas, step counters, and usage metrics across concurrent tools requires atomic INCR primitives with key-level isolation and zero lost updates.
 3. **Unified Semantic Memory:** Agent memories consist of structured metadata (timestamps, domains, parent task IDs) coupled with dense vector embeddings. Storing them together ensures atomic updates and eliminates dual-write drift.
 4. **Tenant & Agent Namespace Isolation:** Multiple agents operating within multi-tenant organizations must remain strictly isolated without complex relational join filtering.
 
@@ -120,7 +120,7 @@ agent.state.set("session", {
 })
 state = agent.state.get("session")
 
-# 2. Lock-free Atomic Counters
+# 2. Concurrent Atomic Counters
 tokens = agent.state.incr("tokens", 150)
 
 # 3. Store Long-Term Semantic Memory
@@ -241,7 +241,7 @@ docker run -p 8300:8300 -p 8301:8301 -e AETHERDB_REQUIRE_AUTH=false aetherdb:v0.
 docker compose -f docker-compose.cluster.yml up -d
 ```
 
-*(Note: Docker Compose configuration is validated statically; container runtime verification requires a host with an active Docker daemon).*
+*(Note: Docker Compose configuration is provided and statically validated. The 3-node cluster runtime deployment was NOT executed during testing because the local development host did not have an active Docker daemon).*
 
 ---
 
@@ -254,21 +254,26 @@ docker compose -f docker-compose.cluster.yml up -d
 
 ---
 
-## 🔬 Benchmark Performance
+## 🔬 Local Engine Benchmarks
 
-Engine benchmarks on bare-metal local storage:
+Empirical microbenchmark results on bare-metal local storage (`release` build, AVX2 SIMD enabled):
 
 ```text
-================================================================================
- WORKLOAD                      THROUGHPUT (QPS)      P50 LATENCY     P99 LATENCY
-================================================================================
- Raw Key-Value SET (LSM)       184,500 ops/sec       42 µs           148 µs
- Raw Key-Value GET (Cache/SST) 342,000 ops/sec       18 µs            65 µs
- Atomic Token INCR             215,000 ops/sec       28 µs            92 µs
- Vector Similarity Recall (HNSW)36,400 queries/sec   410 µs          1.12 ms
- End-to-End Agent Cycle        24,800 cycles/sec     620 µs          1.85 ms
-================================================================================
+================================================================================================
+ WORKLOAD SCENARIO               THROUGHPUT (QPS)      P50 LATENCY    P99 LATENCY    P99.9 LATENCY
+================================================================================================
+ WAL + MemTable Ingestion (8-th) 240,780 ops/sec       0.031 ms       0.240 ms       0.508 ms
+ Point Reads (SSTables + Bloom)   21,139 ops/sec       0.042 ms       0.112 ms       0.211 ms
+ AVX2 SIMD Brute-Force Cosine        327 queries/sec   2.998 ms       3.994 ms       4.160 ms
+ HNSW Top-5 Recall (5k vectors)    1,198 queries/sec   0.801 ms       1.423 ms       1.500 ms
+ Distributed 2PC ACID Txns        84,209 txns/sec      0.010 ms       0.051 ms       0.094 ms
+================================================================================================
 ```
+
+### Local Engine vs. Public Deployment Latency
+
+- **Local Storage Engine:** Direct in-process / local storage benchmarks execute in microseconds (`p50 = 0.031 ms` / `31 µs` for writes, `p50 = 0.010 ms` / `10 µs` for 2PC transactions).
+- **Public Deployment Round-Trip Latency:** External client requests to the public HTTPS endpoint (`https://d60f5382278503.lhr.life`) include wide-area network latency, TLS handshakes, and reverse proxy forwarding (`p50 = 1,445 ms`, `p95 = 3,475 ms`, `max = 6,019 ms`).
 
 ---
 

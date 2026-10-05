@@ -29,7 +29,7 @@ The benchmark harness measures 5 representative AI-agent storage workloads:
 | Workload Category | Operations | Vector Dimensions | Concurrency | Measurement Target |
 | :--- | :--- | :--- | :--- | :--- |
 | **Structured State** | `SET`, `GET`, `DELETE` | N/A | 16–64 threads | MemTable point read/write latency |
-| **Atomic Counters** | `INCR` (token metering) | N/A | 32–128 threads | Lock-free CAS and WAL serial throughput |
+| **Atomic Counters** | `INCR` (token metering) | N/A | 32–128 threads | Key-locked concurrent atomic throughput |
 | **Semantic Memory** | `remember`, `recall` | 128 / 512 / 1536 / 4096-D | 8–32 threads | Dual LSM + HNSW graph traversal latency |
 | **SIMD Vector Kernels**| Cosine similarity | 128 / 512 / 1536-D | Single core | AVX2/FMA vs scalar dot-product speedup |
 | **Distributed Multi-Raft**| 2PC commit intent | N/A | 16 threads | Cross-partition Snapshot Isolation latency |
@@ -41,15 +41,15 @@ The benchmark harness measures 5 representative AI-agent storage workloads:
 *Tested on 8-Core x86_64 Processor with AVX2 & FMA support (64GB RAM, NVMe SSD):*
 
 ```text
-================================================================================
- WORKLOAD                      THROUGHPUT (QPS)      P50 LATENCY     P99 LATENCY
-================================================================================
- Raw Key-Value SET (LSM)       184,500 ops/sec       42 µs           148 µs
- Raw Key-Value GET (Cache/SST) 342,000 ops/sec       18 µs            65 µs
- Atomic Token INCR             215,000 ops/sec       28 µs            92 µs
- Vector Similarity Recall (HNSW)36,400 queries/sec   410 µs          1.12 ms
- End-to-End Agent Cycle        24,800 cycles/sec     620 µs          1.85 ms
-================================================================================
+================================================================================================
+ WORKLOAD SCENARIO               THROUGHPUT (QPS)      P50 LATENCY    P99 LATENCY    P99.9 LATENCY
+================================================================================================
+ WAL + MemTable Ingestion (8-th) 240,780 ops/sec       0.031 ms       0.240 ms       0.508 ms
+ Point Reads (SSTables + Bloom)   21,139 ops/sec       0.042 ms       0.112 ms       0.211 ms
+ AVX2 SIMD Brute-Force Cosine        327 queries/sec   2.998 ms       3.994 ms       4.160 ms
+ HNSW Top-5 Recall (5k vectors)    1,198 queries/sec   0.801 ms       1.423 ms       1.500 ms
+ Distributed 2PC ACID Txns        84,209 txns/sec      0.010 ms       0.051 ms       0.094 ms
+================================================================================================
 ```
 
 ---
