@@ -270,6 +270,17 @@ impl HttpServer {
                 let _ = socket.write_all(apply_cors(&response).as_bytes()).await;
                 return Ok(());
             }
+            ("GET", "/v1/telemetry") | ("GET", "/v1/metrics") => {
+                let snap = telemetry.snapshot(node_id, 2_400_000, 184_000);
+                let json_data = serde_json::to_string(&snap).unwrap_or("{}".to_string());
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization, X-Aether-Tenant\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    json_data.len(),
+                    json_data
+                );
+                let _ = socket.write_all(apply_cors(&response).as_bytes()).await;
+                return Ok(());
+            }
             ("GET", "/metrics")
                 if !auth.is_strict()
                     || std::env::var("AETHERDB_PUBLIC_METRICS")
@@ -1100,6 +1111,10 @@ const DEVTOOLS_HTML: &str = r##"<!DOCTYPE html>
       <div class="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-400 text-[11px]">
         <span class="text-slate-500">ENGINE:</span>
         <span class="text-slate-200">LSM-Tree + HNSW SIMD</span>
+      </div>
+      <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[11px]">
+        <span class="text-slate-500">AUTH:</span>
+        <input id="dashboardApiKey" type="password" placeholder="API Key" oninput="saveDashboardApiKey(this.value)" class="bg-transparent text-slate-200 focus:outline-none w-20 sm:w-28 text-[11px] mono placeholder:text-slate-600" title="Paste your AETHERDB_API_KEY here for authenticated operations" />
       </div>
       <div id="connectionStatusBadge" class="flex items-center gap-2 px-3 py-1 rounded bg-emerald-950/70 border border-emerald-800/80 text-emerald-400 text-[11px] font-medium transition-colors">
         <span id="connectionDot" class="h-2 w-2 rounded-full bg-emerald-400 status-pulse"></span>
@@ -3174,6 +3189,25 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       }
     }
 
+    function getStoredApiKey() {
+      return localStorage.getItem('aether_api_key') || '';
+    }
+    function saveDashboardApiKey(val) {
+      if (val && val.trim()) {
+        localStorage.setItem('aether_api_key', val.trim());
+      } else {
+        localStorage.removeItem('aether_api_key');
+      }
+    }
+    function getApiHeaders(extraHeaders = {}) {
+      const headers = { 'Content-Type': 'application/json', ...extraHeaders };
+      const key = getStoredApiKey();
+      if (key) {
+        headers['Authorization'] = `Bearer ${key}`;
+      }
+      return headers;
+    }
+
     // Sync routing with URL hash on load
     window.addEventListener('DOMContentLoaded', () => {
       const hash = window.location.hash.replace('#', '');
@@ -3182,6 +3216,10 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       const endpointStr = window.location.origin || 'http://127.0.0.1:8301';
       const endpointEl = document.getElementById('headerEndpoint');
       if (endpointEl) endpointEl.textContent = endpointStr;
+
+      // Restore stored API key
+      const keyEl = document.getElementById('dashboardApiKey');
+      if (keyEl) keyEl.value = getStoredApiKey();
       
       updateTelemetry();
       fetchAgentInitialSummary('research-agent');
@@ -3228,7 +3266,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
     // Live Telemetry Polling (Every 2 seconds)
     async function updateTelemetry() {
       try {
-        const res = await fetch('/v1/telemetry');
+        const res = await fetch('/v1/telemetry', { headers: getApiHeaders() });
         if (!res.ok) throw new Error('Non-200 status: ' + res.status);
         const data = await res.json();
 
@@ -3521,7 +3559,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       try {
         const res = await fetch('/v1/agent/state/get', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ agent_id: agentId, key: 'session' })
         });
         const data = await res.json();
@@ -3538,7 +3576,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
         // Fetch tokens
         const tokenRes = await fetch('/v1/agent/state/get', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ agent_id: agentId, key: 'tokens' })
         });
         const tokenData = await tokenRes.json();
@@ -3663,7 +3701,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
         // 1. Fetch Session/Queried State
         const res = await fetch('/v1/agent/state/get', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ agent_id: agentId, key: queryKey })
         });
         const data = await res.json();
@@ -3697,7 +3735,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
         // 2. Fetch Token State
         const tokRes = await fetch('/v1/agent/state/get', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ agent_id: agentId, key: 'tokens' })
         });
         const tokData = await tokRes.json();
@@ -3879,7 +3917,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       // 1. Query KV session state
       try {
         const t0 = performance.now();
-        const res = await fetch('/v1/agent/state/get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent_id: agentId, key: 'session' }) });
+        const res = await fetch('/v1/agent/state/get', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ agent_id: agentId, key: 'session' }) });
         const d = await res.json();
         const ms = (performance.now() - t0).toFixed(1);
         if (d.found) {
@@ -3897,7 +3935,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       // 2. Query Atomic tokens
       try {
         const t0 = performance.now();
-        const res = await fetch('/v1/agent/state/get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent_id: agentId, key: 'tokens' }) });
+        const res = await fetch('/v1/agent/state/get', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ agent_id: agentId, key: 'tokens' }) });
         const d = await res.json();
         const ms = (performance.now() - t0).toFixed(1);
         const tok = d.found && d.state !== null ? d.state : 0;
@@ -3913,7 +3951,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
         const t0 = performance.now();
         const res = await fetch('/v1/agent/memory/recall', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ agent_id: agentId, query: 'test probe', embedding: [0.92, 0.08, 0, 0, 0.15, -0.05, 0.32], top_k: 1 })
         });
         const d = await res.json();
@@ -4036,7 +4074,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
         // 1. Delete root state
         const resRoot = await fetch('/v1/agent/state/delete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ agent_id: agentId })
         });
         if (!resRoot.ok) {
@@ -4050,7 +4088,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
         for (const k of deleteKeys) {
           const r = await fetch('/v1/agent/state/delete', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getApiHeaders(),
             body: JSON.stringify({ agent_id: agentId, key: k })
           });
           if (!r.ok) {
@@ -4115,7 +4153,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       const key = document.getElementById('kvKey').value.trim();
       const value = document.getElementById('kvVal').value.trim();
       if (!key) return alert('Key is required');
-      const res = await fetch('/v1/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) });
+      const res = await fetch('/v1/set', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ key, value }) });
       const data = await res.json();
       document.getElementById('kvOutput').textContent = JSON.stringify(data, null, 2);
       updateTelemetry();
@@ -4124,7 +4162,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
     async function handleGet() {
       const key = document.getElementById('kvKey').value.trim();
       if (!key) return alert('Key is required');
-      const res = await fetch('/v1/get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+      const res = await fetch('/v1/get', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ key }) });
       const data = await res.json();
       document.getElementById('kvOutput').textContent = JSON.stringify(data, null, 2);
       updateTelemetry();
@@ -4133,7 +4171,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
     async function handleDel() {
       const key = document.getElementById('kvKey').value.trim();
       if (!key) return alert('Key is required');
-      const res = await fetch('/v1/del', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+      const res = await fetch('/v1/del', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ key }) });
       const data = await res.json();
       document.getElementById('kvOutput').textContent = JSON.stringify(data, null, 2);
       updateTelemetry();
@@ -4148,7 +4186,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       const amount = parseInt(document.getElementById('incrAmount').value, 10) || 1;
       if (!key) return alert('Counter key required');
       const t0 = performance.now();
-      const res = await fetch('/v1/incr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, amount }) });
+      const res = await fetch('/v1/incr', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ key, amount }) });
       const data = await res.json();
       const elapsed = (performance.now() - t0).toFixed(2);
       const val = data.value !== undefined ? data.value : data.new_value;
@@ -4169,7 +4207,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       } catch {
         return alert('Invalid JSON in state input');
       }
-      const res = await fetch('/v1/agent/state/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent_id, key, state }) });
+      const res = await fetch('/v1/agent/state/set', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ agent_id, key, state }) });
       const data = await res.json();
       document.getElementById('agentOutput').textContent = JSON.stringify(data, null, 2);
       if (key) {
@@ -4182,7 +4220,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
     async function handleAgentStateGet() {
       const agent_id = currentSelectedAgentId;
       const key = document.getElementById('agentKeyInput').value.trim() || undefined;
-      const res = await fetch('/v1/agent/state/get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent_id, key }) });
+      const res = await fetch('/v1/agent/state/get', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ agent_id, key }) });
       const data = await res.json();
       document.getElementById('agentOutput').textContent = JSON.stringify(data, null, 2);
       if (key && data.found) {
@@ -4194,7 +4232,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
 
     async function handleAgentIncrTokens(amount) {
       const agent_id = currentSelectedAgentId;
-      const res = await fetch('/v1/agent/state/incr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent_id, key: 'tokens', amount }) });
+      const res = await fetch('/v1/agent/state/incr', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ agent_id, key: 'tokens', amount }) });
       const data = await res.json();
       document.getElementById('agentOutput').textContent = JSON.stringify(data, null, 2);
       refreshCurrentAgentDetail();
@@ -4212,7 +4250,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       const agent_id = currentSelectedAgentId;
       const key = document.getElementById('agentKeyInput').value.trim() || undefined;
       if (!confirm(`Delete subkey "${key || 'root'}" for agent "${agent_id}"?`)) return;
-      const res = await fetch('/v1/agent/state/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent_id, key }) });
+      const res = await fetch('/v1/agent/state/delete', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ agent_id, key }) });
       const data = await res.json();
       document.getElementById('agentOutput').textContent = JSON.stringify(data, null, 2);
       if (key && agentInspectedKeysMap.has(agent_id)) {
@@ -4266,7 +4304,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       try {
         const res = await fetch('/v1/agent/memory/remember', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ agent_id, memory_id, text, embedding, metadata })
         });
         
@@ -4322,7 +4360,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       try {
         const res = await fetch('/v1/agent/memory/recall', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ agent_id, query, embedding, top_k })
         });
         
@@ -4515,7 +4553,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       try {
         const res = await fetch('/v1/agent/memory/recall', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ agent_id, query, embedding, top_k })
         });
         const elapsed = (performance.now() - t0).toFixed(2);
@@ -4668,7 +4706,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       try {
         const res = await fetch('/v1/agent/memory/remember', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify({ agent_id, memory_id, text, embedding, metadata })
         });
         if (!res.ok) {
@@ -4857,7 +4895,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       const id = document.getElementById('vecId').value.trim();
       let vector;
       try { vector = JSON.parse(document.getElementById('vecFloats').value); } catch { return alert('Invalid vector array'); }
-      const res = await fetch('/v1/vector/upsert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, vector, metadata: JSON.stringify({ source: 'console' }) }) });
+      const res = await fetch('/v1/vector/upsert', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ id, vector, metadata: JSON.stringify({ source: 'console' }) }) });
       const data = await res.json();
       document.getElementById('vecResults').innerHTML = `<div class="p-2.5 bg-emerald-950/50 border border-emerald-800 rounded text-xs text-emerald-400 mono">✓ Vector "${id}" (${vector.length} dims) upserted.</div>`;
       updateTelemetry();
@@ -4866,7 +4904,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
     async function handleVecSearch() {
       let vector;
       try { vector = JSON.parse(document.getElementById('vecFloats').value); } catch { return alert('Invalid vector array'); }
-      const res = await fetch('/v1/vector/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vector, top_k: 5 }) });
+      const res = await fetch('/v1/vector/search', { method: 'POST', headers: getApiHeaders(), body: JSON.stringify({ vector, top_k: 5 }) });
       const data = await res.json();
       const container = document.getElementById('vecResults');
       container.innerHTML = '';
@@ -5002,7 +5040,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       try {
         const res = await fetch(endpoint, {
           method: method,
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify(bodyObj)
         });
         const elapsed = (performance.now() - t0).toFixed(2);
@@ -5116,7 +5154,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       try {
         const res = await fetch(endpoint, {
           method: method,
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify(bodyObj)
         });
         const elapsed = (performance.now() - t0).toFixed(2);
@@ -5221,7 +5259,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       try {
         const res = await fetch(endpoint, {
           method: method,
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify(bodyObj)
         });
         const elapsed = (performance.now() - t0).toFixed(2);
@@ -5322,7 +5360,7 @@ await db.kv.set("user_session_99", "eyJ1c2VySWQiOiAiYWRtaW4iLCAicm9sZSI6ICJzeXNv
       try {
         const res = await fetch(endpoint, {
           method: method,
-          headers: { 'Content-Type': 'application/json' },
+          headers: getApiHeaders(),
           body: JSON.stringify(bodyObj)
         });
         const elapsed = (performance.now() - t0).toFixed(2);
