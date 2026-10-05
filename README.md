@@ -79,7 +79,7 @@ Benchmarked on single NVMe SSD storage node compiled in `--release` mode:
 
 To run the empirical benchmark suite yourself:
 ```bash
-cargo run --release --bin aether-bench -- --records 100000
+cargo run --release --bin aether-bench -- --num-ops 100000
 ```
 
 ---

@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Run AetherDB Empirical Benchmark Suite
-        run: cargo run --release --bin aether-bench -- --records 50000
+        run: cargo run --release --bin aether-bench -- --num-ops 50000
 
   sdk-tests:
     name: JavaScript & Python SDK Integration
