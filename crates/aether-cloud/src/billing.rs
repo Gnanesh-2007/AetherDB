@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use crate::metering::ProjectUsage;
 use crate::tenant::PlanTier;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LineItem {

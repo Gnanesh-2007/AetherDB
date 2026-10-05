@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlanTier {
@@ -98,8 +98,14 @@ impl TenantManager {
             created_at: now,
         };
 
-        manager.orgs.get_mut().insert(default_org.id.clone(), default_org);
-        manager.projects.get_mut().insert(default_proj.id.clone(), default_proj);
+        manager
+            .orgs
+            .get_mut()
+            .insert(default_org.id.clone(), default_org);
+        manager
+            .projects
+            .get_mut()
+            .insert(default_proj.id.clone(), default_proj);
         manager
     }
 

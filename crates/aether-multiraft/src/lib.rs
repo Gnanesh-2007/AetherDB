@@ -1,5 +1,5 @@
-pub mod router;
 pub mod manager;
+pub mod router;
 
-pub use router::RangeRouter;
 pub use manager::MultiRaftManager;
+pub use router::RangeRouter;

@@ -1,0 +1,254 @@
+{
+  "metadata": {
+    "os": "windows",
+    "arch": "x86_64",
+    "num_cpus": 16,
+    "rust_build_mode": "release (optimized)",
+    "aether_version": "0.1.0",
+    "timestamp_utc": "UNIX_1791215187"
+  },
+  "config": {
+    "agents": 100,
+    "base_ops": 5000,
+    "vector_dim": 768,
+    "concurrency": 8
+  },
+  "reports": [
+    {
+      "workload_name": "Agent State: SET",
+      "total_ops": 5000,
+      "elapsed_ms": 10.6225,
+      "ops_per_sec": 470698.98799717583,
+      "min_us": 1,
+      "p50_us": 1,
+      "p90_us": 1,
+      "p95_us": 2,
+      "p99_us": 2,
+      "p999_us": 16,
+      "max_us": 318,
+      "avg_us": 1.2076
+    },
+    {
+      "workload_name": "Agent State: GET",
+      "total_ops": 5000,
+      "elapsed_ms": 1.2418,
+      "ops_per_sec": 4026413.2710581417,
+      "min_us": 0,
+      "p50_us": 0,
+      "p90_us": 0,
+      "p95_us": 0,
+      "p99_us": 0,
+      "p999_us": 0,
+      "max_us": 0,
+      "avg_us": 0.0
+    },
+    {
+      "workload_name": "Agent State: DELETE",
+      "total_ops": 5000,
+      "elapsed_ms": 9.874600000000001,
+      "ops_per_sec": 506349.62428857875,
+      "min_us": 1,
+      "p50_us": 1,
+      "p90_us": 1,
+      "p95_us": 1,
+      "p99_us": 2,
+      "p999_us": 19,
+      "max_us": 121,
+      "avg_us": 1.123
+    }
+  ],
+  "atomic_concurrency_scaling": [
+    {
+      "threads": 1,
+      "total_increments": 5000,
+      "elapsed_ms": 10.9216,
+      "throughput_ops_sec": 457808.3797245825,
+      "p50_us": 1,
+      "p99_us": 3,
+      "final_value": 5000,
+      "expected_value": 5000,
+      "zero_lost_updates": true
+    },
+    {
+      "threads": 8,
+      "total_increments": 5000,
+      "elapsed_ms": 23.2053,
+      "throughput_ops_sec": 215468.01808207607,
+      "p50_us": 5,
+      "p99_us": 261,
+      "final_value": 5000,
+      "expected_value": 5000,
+      "zero_lost_updates": true
+    },
+    {
+      "threads": 32,
+      "total_increments": 4992,
+      "elapsed_ms": 23.2869,
+      "throughput_ops_sec": 214369.4523530397,
+      "p50_us": 4,
+      "p99_us": 1050,
+      "final_value": 4992,
+      "expected_value": 4992,
+      "zero_lost_updates": true
+    },
+    {
+      "threads": 64,
+      "total_increments": 4992,
+      "elapsed_ms": 23.5198,
+      "throughput_ops_sec": 212246.70277808484,
+      "p50_us": 5,
+      "p99_us": 1887,
+      "final_value": 4992,
+      "expected_value": 4992,
+      "zero_lost_updates": true
+    }
+  ],
+  "vector_scaling": [
+    {
+      "vector_count": 1000,
+      "dimensions": 128,
+      "query_count": 200,
+      "upsert_qps": 5555.629630617297,
+      "search_qps": 11692.009096383075,
+      "search_p50_ms": 0.084,
+      "search_p95_ms": 0.089,
+      "search_p99_ms": 0.094
+    },
+    {
+      "vector_count": 1000,
+      "dimensions": 384,
+      "query_count": 200,
+      "upsert_qps": 2233.801255128249,
+      "search_qps": 5088.967880979219,
+      "search_p50_ms": 0.189,
+      "search_p95_ms": 0.232,
+      "search_p99_ms": 0.31
+    },
+    {
+      "vector_count": 1000,
+      "dimensions": 768,
+      "query_count": 200,
+      "upsert_qps": 1276.231177025899,
+      "search_qps": 2809.6990812284007,
+      "search_p50_ms": 0.348,
+      "search_p95_ms": 0.415,
+      "search_p99_ms": 0.438
+    },
+    {
+      "vector_count": 10000,
+      "dimensions": 128,
+      "query_count": 100,
+      "upsert_qps": 2623.4038686182553,
+      "search_qps": 7919.035778203646,
+      "search_p50_ms": 0.122,
+      "search_p95_ms": 0.142,
+      "search_p99_ms": 0.218
+    },
+    {
+      "vector_count": 10000,
+      "dimensions": 384,
+      "query_count": 100,
+      "upsert_qps": 1116.5759688755788,
+      "search_qps": 2608.09238906479,
+      "search_p50_ms": 0.361,
+      "search_p95_ms": 0.491,
+      "search_p99_ms": 0.646
+    },
+    {
+      "vector_count": 10000,
+      "dimensions": 768,
+      "query_count": 100,
+      "upsert_qps": 612.9096748025074,
+      "search_qps": 1868.7501985547085,
+      "search_p50_ms": 0.504,
+      "search_p95_ms": 0.709,
+      "search_p99_ms": 0.8
+    },
+    {
+      "vector_count": 50000,
+      "dimensions": 128,
+      "query_count": 50,
+      "upsert_qps": 1816.5700119416226,
+      "search_qps": 4849.472377405338,
+      "search_p50_ms": 0.195,
+      "search_p95_ms": 0.273,
+      "search_p99_ms": 0.374
+    },
+    {
+      "vector_count": 50000,
+      "dimensions": 384,
+      "query_count": 50,
+      "upsert_qps": 709.2473990876559,
+      "search_qps": 2523.480990617698,
+      "search_p50_ms": 0.355,
+      "search_p95_ms": 0.641,
+      "search_p99_ms": 0.744
+    }
+  ],
+  "combined_workflow_scaling": [
+    {
+      "concurrent_agents": 1,
+      "total_turns": 1000,
+      "elapsed_ms": 129.9122,
+      "workflow_throughput_turns_sec": 7697.5064697541875,
+      "p50_ms": 0.123,
+      "p95_ms": 0.161,
+      "p99_ms": 0.242
+    },
+    {
+      "concurrent_agents": 8,
+      "total_turns": 1000,
+      "elapsed_ms": 28.4683,
+      "workflow_throughput_turns_sec": 35126.79014904297,
+      "p50_ms": 0.19,
+      "p95_ms": 0.358,
+      "p99_ms": 0.774
+    },
+    {
+      "concurrent_agents": 32,
+      "total_turns": 992,
+      "elapsed_ms": 19.995700000000003,
+      "workflow_throughput_turns_sec": 49610.666293253045,
+      "p50_ms": 0.452,
+      "p95_ms": 1.177,
+      "p99_ms": 1.546
+    },
+    {
+      "concurrent_agents": 64,
+      "total_turns": 960,
+      "elapsed_ms": 21.2179,
+      "workflow_throughput_turns_sec": 45244.81687631669,
+      "p50_ms": 0.763,
+      "p95_ms": 2.184,
+      "p99_ms": 2.961
+    }
+  ],
+  "persistence_recovery": {
+    "state_records_written": 1000,
+    "memories_written": 1000,
+    "token_counter_final": 10000,
+    "recovery_time_ms": 121.71759999999999,
+    "state_records_recovered": 1000,
+    "memories_recovered": 1000,
+    "token_counter_recovered": 10000,
+    "integrity_verified": true
+  },
+  "isolation_test": {
+    "total_isolated_agents": 3,
+    "queries_per_agent": 100,
+    "cross_agent_leaks_detected": 0,
+    "tenant_cross_talk_detected": 0,
+    "isolation_guarantee_met": true
+  },
+  "concurrent_100_agents": {
+    "agent_count": 100,
+    "duration_secs": 5.0,
+    "total_operations": 1561644,
+    "successful_operations": 1561644,
+    "failed_operations": 0,
+    "overall_qps": 104109.6,
+    "p50_ms": 0.781,
+    "p99_ms": 4.085,
+    "token_conservation_check": true
+  }
+}

@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  aether-node-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aether-node-1
+    command: ["aether-server", "--node-id", "1", "--addr", "0.0.0.0:8300", "--http-addr", "0.0.0.0:8301", "--data-dir", "/data"]
+    ports:
+      - "8300:8300"
+      - "8301:8301"
+    volumes:
+      - aether_cluster_node1_data:/data
+    environment:
+      - RUST_LOG=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8301/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+    networks:
+      - aether_cluster_net
+    restart: unless-stopped
+
+  aether-node-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aether-node-2
+    command: ["aether-server", "--node-id", "2", "--addr", "0.0.0.0:8310", "--http-addr", "0.0.0.0:8311", "--data-dir", "/data"]
+    ports:
+      - "8310:8310"
+      - "8311:8311"
+    volumes:
+      - aether_cluster_node2_data:/data
+    environment:
+      - RUST_LOG=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8311/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+    networks:
+      - aether_cluster_net
+    restart: unless-stopped
+
+  aether-node-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aether-node-3
+    command: ["aether-server", "--node-id", "3", "--addr", "0.0.0.0:8320", "--http-addr", "0.0.0.0:8321", "--data-dir", "/data"]
+    ports:
+      - "8320:8320"
+      - "8321:8321"
+    volumes:
+      - aether_cluster_node3_data:/data
+    environment:
+      - RUST_LOG=info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8321/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+    networks:
+      - aether_cluster_net
+    restart: unless-stopped
+
+networks:
+  aether_cluster_net:
+    driver: bridge
+
+volumes:
+  aether_cluster_node1_data:
+    driver: local
+  aether_cluster_node2_data:
+    driver: local
+  aether_cluster_node3_data:
+    driver: local

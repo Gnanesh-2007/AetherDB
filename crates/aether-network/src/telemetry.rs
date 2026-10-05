@@ -1,8 +1,8 @@
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
-use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
 
 const MAX_ACTIVITY_LOG_SIZE: usize = 30;
 const MAX_LATENCY_WINDOW: usize = 500;
@@ -92,11 +92,21 @@ impl TelemetryCollector {
     ) {
         self.total_requests.fetch_add(1, Ordering::Relaxed);
         match op {
-            "SET" => { self.total_writes.fetch_add(1, Ordering::Relaxed); }
-            "GET" => { self.total_reads.fetch_add(1, Ordering::Relaxed); }
-            "INCR" => { self.total_token_ops.fetch_add(1, Ordering::Relaxed); }
-            "UPSERT VECTOR" => { self.total_vectors.fetch_add(1, Ordering::Relaxed); }
-            "VECTOR SEARCH" => {
+            "SET" | "AGENT STATE SET" => {
+                self.total_writes.fetch_add(1, Ordering::Relaxed);
+            }
+            "GET" | "AGENT STATE GET" => {
+                self.total_reads.fetch_add(1, Ordering::Relaxed);
+            }
+            "INCR" | "AGENT STATE INCR" => {
+                self.total_token_ops.fetch_add(1, Ordering::Relaxed);
+            }
+            "UPSERT VECTOR" | "AGENT REMEMBER" => {
+                self.total_writes.fetch_add(1, Ordering::Relaxed);
+                self.total_vectors.fetch_add(1, Ordering::Relaxed);
+            }
+            "VECTOR SEARCH" | "AGENT RECALL" => {
+                self.total_reads.fetch_add(1, Ordering::Relaxed);
                 let mut v_lats = self.recent_vector_latencies.lock();
                 if v_lats.len() >= MAX_LATENCY_WINDOW {
                     v_lats.pop_front();
@@ -201,5 +211,67 @@ impl TelemetryCollector {
             },
             live_activity: activities,
         }
+    }
+
+    pub fn prometheus_text(&self, node_id: u64, storage_bytes: u64, wal_bytes: u64) -> String {
+        let snap = self.snapshot(node_id, storage_bytes, wal_bytes);
+        let total_writes = self.total_writes.load(Ordering::Relaxed);
+        let total_reads = self.total_reads.load(Ordering::Relaxed);
+
+        let p50_secs = snap.engine.p50_latency_ms / 1000.0;
+        let p99_secs = snap.engine.p99_latency_ms / 1000.0;
+
+        format!(
+            "# HELP aetherdb_requests_total Total number of HTTP requests processed by AetherDB.\n\
+             # TYPE aetherdb_requests_total counter\n\
+             aetherdb_requests_total{{node_id=\"{}\"}} {}\n\n\
+             # HELP aetherdb_writes_total Total write operations processed.\n\
+             # TYPE aetherdb_writes_total counter\n\
+             aetherdb_writes_total{{node_id=\"{}\"}} {}\n\n\
+             # HELP aetherdb_reads_total Total read operations processed.\n\
+             # TYPE aetherdb_reads_total counter\n\
+             aetherdb_reads_total{{node_id=\"{}\"}} {}\n\n\
+             # HELP aetherdb_memory_vectors_total Total vector embeddings stored in agent memory.\n\
+             # TYPE aetherdb_memory_vectors_total counter\n\
+             aetherdb_memory_vectors_total{{node_id=\"{}\"}} {}\n\n\
+             # HELP aetherdb_token_operations_total Total atomic token increment operations.\n\
+             # TYPE aetherdb_token_operations_total counter\n\
+             aetherdb_token_operations_total{{node_id=\"{}\"}} {}\n\n\
+             # HELP aetherdb_active_agents Current number of active AI agents.\n\
+             # TYPE aetherdb_active_agents gauge\n\
+             aetherdb_active_agents{{node_id=\"{}\"}} {}\n\n\
+             # HELP aetherdb_request_duration_seconds Request latency percentiles in seconds.\n\
+             # TYPE aetherdb_request_duration_seconds gauge\n\
+             aetherdb_request_duration_seconds{{node_id=\"{}\",quantile=\"0.50\"}} {:.6}\n\
+             aetherdb_request_duration_seconds{{node_id=\"{}\",quantile=\"0.99\"}} {:.6}\n\n\
+             # HELP aetherdb_storage_bytes Estimated memory and disk storage footprint in bytes.\n\
+             # TYPE aetherdb_storage_bytes gauge\n\
+             aetherdb_storage_bytes{{node_id=\"{}\",type=\"memtable\"}} {}\n\
+             aetherdb_storage_bytes{{node_id=\"{}\",type=\"wal\"}} {}\n\n\
+             # HELP aetherdb_node_info Node runtime information.\n\
+             # TYPE aetherdb_node_info gauge\n\
+             aetherdb_node_info{{node_id=\"{}\",engine=\"aetherdb-rust\",version=\"0.1.0\"}} 1\n",
+            node_id,
+            snap.engine.requests_total,
+            node_id,
+            total_writes,
+            node_id,
+            total_reads,
+            node_id,
+            snap.agent_memory.memory_vectors,
+            node_id,
+            snap.agent_memory.token_operations,
+            node_id,
+            snap.agent_memory.active_agents,
+            node_id,
+            p50_secs,
+            node_id,
+            p99_secs,
+            node_id,
+            snap.engine.storage_bytes,
+            node_id,
+            snap.engine.wal_bytes,
+            node_id
+        )
     }
 }

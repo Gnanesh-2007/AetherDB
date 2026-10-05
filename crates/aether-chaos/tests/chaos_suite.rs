@@ -46,7 +46,10 @@ fn test_wal_bit_rot_and_corruption_recovery() {
 
     // Step D: Recovery MUST catch CRC32 mismatch and prevent corrupted data ingestion
     let recovery_result = WriteAheadLog::recover(&path);
-    assert!(recovery_result.is_err(), "Corrupted WAL record must trigger ChecksumMismatch");
+    assert!(
+        recovery_result.is_err(),
+        "Corrupted WAL record must trigger ChecksumMismatch"
+    );
 }
 
 /// 2. High-Concurrency Stress Test:
@@ -89,7 +92,10 @@ fn test_high_concurrency_100_threads_stress() {
         h.join().unwrap();
     }
 
-    assert_eq!(counter.load(Ordering::Relaxed), num_threads * ops_per_thread);
+    assert_eq!(
+        counter.load(Ordering::Relaxed),
+        num_threads * ops_per_thread
+    );
 
     // Verify each account key has its latest state recorded
     let read_txn = coordinator.begin(999999);

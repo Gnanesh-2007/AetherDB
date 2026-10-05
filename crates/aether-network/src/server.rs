@@ -4,10 +4,10 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info};
 
+use crate::protocol::{Request, Response};
 use aether_core::error::{AetherError, Result};
 use aether_multiraft::MultiRaftManager;
 use aether_txn::TxnCoordinator;
-use crate::protocol::{Request, Response};
 
 pub struct NetworkServer {
     addr: SocketAddr,

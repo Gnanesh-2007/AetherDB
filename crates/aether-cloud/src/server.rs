@@ -1,15 +1,15 @@
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info};
 
-use aether_core::error::{AetherError, Result};
 use crate::apikey::ApiKeyManager;
 use crate::billing::BillingCalculator;
 use crate::metering::MeteringEngine;
 use crate::tenant::{PlanTier, TenantManager};
+use aether_core::error::{AetherError, Result};
 
 #[derive(Debug, Deserialize)]
 struct CreateProjectRequest {
@@ -68,7 +68,10 @@ impl AetherCloudServer {
             .await
             .map_err(|e| AetherError::IoError(e.to_string()))?;
 
-        info!("☁️ AetherCloud Control Plane & SaaS Portal online at http://{}", self.addr);
+        info!(
+            "☁️ AetherCloud Control Plane & SaaS Portal online at http://{}",
+            self.addr
+        );
 
         loop {
             let (socket, _) = match listener.accept().await {
@@ -97,43 +100,39 @@ impl AetherCloudServer {
         keys: Arc<ApiKeyManager>,
         metering: Arc<MeteringEngine>,
     ) -> Result<()> {
-        let mut buffer = [0u8; 65536];
-        let bytes_read = match socket.read(&mut buffer).await {
-            Ok(n) if n > 0 => n,
+        let req = match aether_network::httpio::read_http_request(&mut socket).await {
+            Ok(Some(r)) => r,
             _ => return Ok(()),
         };
-
-        let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
-        let mut lines = request_str.lines();
-        let request_line = lines.next().unwrap_or("");
-        let parts: Vec<&str> = request_line.split_whitespace().collect();
-
-        if parts.len() < 2 {
+        if req.method.is_empty() || req.path.is_empty() {
             return Ok(());
         }
-
-        let method = parts[0];
-        let path = parts[1];
-
-        let body = if let Some(idx) = request_str.find("\r\n\r\n") {
-            &request_str[idx + 4..]
-        } else {
-            ""
-        };
+        let method = req.method.as_str();
+        let path = req.path.as_str();
+        let body = req.body.as_str();
 
         let default_tenant_id = "org_default";
         let default_project_id = "proj_live_01";
 
         let (status_code, content_type, response_body) = match (method, path) {
-            ("GET", "/") | ("GET", "/dashboard") => (
+            ("GET", "/health") => (
                 200,
-                "text/html; charset=utf-8",
-                DASHBOARD_HTML.to_string(),
+                "application/json",
+                r#"{"status":"healthy","service":"aethercloud-control-plane","version":"0.1.0"}"#
+                    .to_string(),
             ),
+
+            ("GET", "/") | ("GET", "/dashboard") => {
+                (200, "text/html; charset=utf-8", DASHBOARD_HTML.to_string())
+            }
 
             ("GET", "/cloud/v1/projects") => {
                 let list = tenants.list_projects(default_tenant_id);
-                (200, "application/json", serde_json::to_string(&list).unwrap())
+                (
+                    200,
+                    "application/json",
+                    serde_json::to_string(&list).unwrap(),
+                )
             }
 
             ("POST", "/cloud/v1/projects") => {
@@ -141,40 +140,73 @@ impl AetherCloudServer {
                     Ok(req) => {
                         let region = req.region.unwrap_or_else(|| "us-east-1".to_string());
                         let proj = tenants.create_project(default_tenant_id, &req.name, &region);
-                        (200, "application/json", serde_json::to_string(&proj).unwrap())
+                        (
+                            200,
+                            "application/json",
+                            serde_json::to_string(&proj).unwrap(),
+                        )
                     }
-                    Err(_) => (400, "application/json", r#"{"error":"Invalid project request"}"#.to_string()),
+                    Err(_) => (
+                        400,
+                        "application/json",
+                        r#"{"error":"Invalid project request"}"#.to_string(),
+                    ),
                 }
             }
 
             ("GET", "/cloud/v1/keys") => {
                 let key_list = keys.list_keys(default_project_id);
-                (200, "application/json", serde_json::to_string(&key_list).unwrap())
+                (
+                    200,
+                    "application/json",
+                    serde_json::to_string(&key_list).unwrap(),
+                )
             }
 
-            ("POST", "/cloud/v1/keys") => {
-                match serde_json::from_str::<CreateKeyRequest>(body) {
-                    Ok(req) => {
-                        let scopes = req.scopes.unwrap_or_else(|| vec!["read".to_string(), "write".to_string()]);
-                        let (api_key, raw_token) = keys.create_key(default_tenant_id, &req.project_id, &req.name, scopes);
-                        #[derive(Serialize)]
-                        struct KeyCreatedResp {
-                            key: crate::apikey::ApiKey,
-                            raw_token: String,
-                        }
-                        (200, "application/json", serde_json::to_string(&KeyCreatedResp { key: api_key, raw_token }).unwrap())
+            ("POST", "/cloud/v1/keys") => match serde_json::from_str::<CreateKeyRequest>(body) {
+                Ok(req) => {
+                    let scopes = req
+                        .scopes
+                        .unwrap_or_else(|| vec!["read".to_string(), "write".to_string()]);
+                    let (api_key, raw_token) =
+                        keys.create_key(default_tenant_id, &req.project_id, &req.name, scopes);
+                    #[derive(Serialize)]
+                    struct KeyCreatedResp {
+                        key: crate::apikey::ApiKey,
+                        raw_token: String,
                     }
-                    Err(_) => (400, "application/json", r#"{"error":"Invalid key creation payload"}"#.to_string()),
+                    (
+                        200,
+                        "application/json",
+                        serde_json::to_string(&KeyCreatedResp {
+                            key: api_key,
+                            raw_token,
+                        })
+                        .unwrap(),
+                    )
                 }
-            }
+                Err(_) => (
+                    400,
+                    "application/json",
+                    r#"{"error":"Invalid key creation payload"}"#.to_string(),
+                ),
+            },
 
             ("POST", "/cloud/v1/keys/revoke") => {
                 match serde_json::from_str::<RevokeKeyRequest>(body) {
                     Ok(req) => {
                         let success = keys.revoke_key(&req.key_id);
-                        (200, "application/json", format!(r#"{{"revoked":{}}}"#, success))
+                        (
+                            200,
+                            "application/json",
+                            format!(r#"{{"revoked":{}}}"#, success),
+                        )
                     }
-                    Err(_) => (400, "application/json", r#"{"error":"Invalid revoke payload"}"#.to_string()),
+                    Err(_) => (
+                        400,
+                        "application/json",
+                        r#"{"error":"Invalid revoke payload"}"#.to_string(),
+                    ),
                 }
             }
 
@@ -186,14 +218,22 @@ impl AetherCloudServer {
                     org.plan_tier.max_vectors(),
                     10 * 1024 * 1024 * 1024, // 10 GB limit
                 );
-                (200, "application/json", serde_json::to_string(&report).unwrap())
+                (
+                    200,
+                    "application/json",
+                    serde_json::to_string(&report).unwrap(),
+                )
             }
 
             ("GET", "/cloud/v1/billing") => {
                 let org = tenants.get_org(default_tenant_id).unwrap();
                 let usage = metering.get_usage(default_project_id);
                 let invoice = BillingCalculator::calculate_invoice(org.plan_tier, &usage);
-                (200, "application/json", serde_json::to_string(&invoice).unwrap())
+                (
+                    200,
+                    "application/json",
+                    serde_json::to_string(&invoice).unwrap(),
+                )
             }
 
             ("POST", "/cloud/v1/plan/update") => {
@@ -205,9 +245,17 @@ impl AetherCloudServer {
                             _ => PlanTier::Pro,
                         };
                         tenants.update_plan(default_tenant_id, tier);
-                        (200, "application/json", r#"{"status":"updated"}"#.to_string())
+                        (
+                            200,
+                            "application/json",
+                            r#"{"status":"updated"}"#.to_string(),
+                        )
                     }
-                    Err(_) => (400, "application/json", r#"{"error":"Invalid plan payload"}"#.to_string()),
+                    Err(_) => (
+                        400,
+                        "application/json",
+                        r#"{"error":"Invalid plan payload"}"#.to_string(),
+                    ),
                 }
             }
 
@@ -218,11 +266,19 @@ impl AetherCloudServer {
                         metering.record_operation(&req.project_id, &req.op, count);
                         (200, "application/json", r#"{"recorded":true}"#.to_string())
                     }
-                    Err(_) => (400, "application/json", r#"{"error":"Invalid event payload"}"#.to_string()),
+                    Err(_) => (
+                        400,
+                        "application/json",
+                        r#"{"error":"Invalid event payload"}"#.to_string(),
+                    ),
                 }
             }
 
-            _ => (404, "application/json", r#"{"error":"AetherCloud endpoint not found"}"#.to_string()),
+            _ => (
+                404,
+                "application/json",
+                r#"{"error":"AetherCloud endpoint not found"}"#.to_string(),
+            ),
         };
 
         let response = format!(
@@ -233,7 +289,10 @@ impl AetherCloudServer {
             response_body
         );
 
-        socket.write_all(response.as_bytes()).await.map_err(|e| AetherError::IoError(e.to_string()))?;
+        socket
+            .write_all(response.as_bytes())
+            .await
+            .map_err(|e| AetherError::IoError(e.to_string()))?;
         Ok(())
     }
 }

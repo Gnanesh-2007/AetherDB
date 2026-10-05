@@ -5,10 +5,19 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "aether"
+path = "src/main.rs"
+
 [dependencies]
 aether-core = { path = "../aether-core" }
 aether-network = { path = "../aether-network" }
-tokio.workspace = true
-clap.workspace = true
+aether-storage = { path = "../aether-storage" }
+aether-multiraft = { path = "../aether-multiraft" }
+aether-txn = { path = "../aether-txn" }
+tokio = { workspace = true, features = ["full", "process"] }
+clap = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

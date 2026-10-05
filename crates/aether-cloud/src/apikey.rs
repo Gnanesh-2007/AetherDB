@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 use parking_lot::RwLock;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKey {
@@ -56,7 +56,11 @@ impl ApiKeyManager {
 
         let key_id = format!("key_{}", &entropy_hex[..8]);
         let raw_token = format!("aether_sk_live_{}_{}", tenant_id, entropy_hex);
-        let preview = format!("aether_sk_live_{}...{}", tenant_id, &entropy_hex[entropy_hex.len() - 4..]);
+        let preview = format!(
+            "aether_sk_live_{}...{}",
+            tenant_id,
+            &entropy_hex[entropy_hex.len() - 4..]
+        );
 
         let api_key = ApiKey {
             id: key_id.clone(),

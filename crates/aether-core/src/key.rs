@@ -40,7 +40,7 @@ impl MvccKey {
     /// Uses inverted timestamps for descending version sorting.
     pub fn encode(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.user_key.len() + 1 + 12);
-        
+
         // Escape \x00 bytes in user key to prevent delimiter collision
         for &b in &self.user_key {
             if b == 0x00 {
@@ -50,7 +50,7 @@ impl MvccKey {
                 buf.push(b);
             }
         }
-        
+
         // Delimiter
         buf.push(0x00);
         buf.push(0x01);
@@ -86,10 +86,11 @@ impl MvccKey {
 
         let user_escaped = &key_portion[..key_portion.len() - 2];
         let mut user_key = Vec::with_capacity(user_escaped.len());
-        
+
         let mut i = 0;
         while i < user_escaped.len() {
-            if user_escaped[i] == 0x00 && i + 1 < user_escaped.len() && user_escaped[i + 1] == 0xFF {
+            if user_escaped[i] == 0x00 && i + 1 < user_escaped.len() && user_escaped[i + 1] == 0xFF
+            {
                 user_key.push(0x00);
                 i += 2;
             } else {
@@ -125,7 +126,10 @@ mod tests {
 
     #[test]
     fn test_mvcc_key_with_zero_bytes() {
-        let key = MvccKey::new(b"foo\x00bar\x00\x00baz", HlcTimestamp::new(1700000000000, 1));
+        let key = MvccKey::new(
+            b"foo\x00bar\x00\x00baz",
+            HlcTimestamp::new(1700000000000, 1),
+        );
         let encoded = key.encode();
         let decoded = MvccKey::decode(&encoded).unwrap();
         assert_eq!(key, decoded);

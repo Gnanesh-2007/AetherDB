@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use parking_lot::RwLock;
+use crate::router::RangeRouter;
 use aether_core::error::{AetherError, Result};
 use aether_raft::RaftNode;
-use crate::router::RangeRouter;
+use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 pub struct MultiRaftManager {
     pub node_id: u64,
@@ -29,6 +29,8 @@ impl MultiRaftManager {
             .read()
             .get(&range_id)
             .cloned()
-            .ok_or_else(|| AetherError::RaftError(format!("Range {} not hosted on this node", range_id)))
+            .ok_or_else(|| {
+                AetherError::RaftError(format!("Range {} not hosted on this node", range_id))
+            })
     }
 }

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::hlc::HlcTimestamp;
+use serde::{Deserialize, Serialize};
 
 pub type TxnId = u64;
 

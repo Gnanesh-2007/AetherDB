@@ -1,85 +1,26 @@
 version: '3.8'
 
 services:
-  aether-cloud:
+  aetherdb:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: aether-cloud
-    entrypoint: ["aether-cloud"]
-    command: ["--addr", "0.0.0.0:8400"]
-    ports:
-      - "8400:8400"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8400/cloud/v1/projects"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - aether-net
-
-  aether-node-1:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: aether-node-1
-    command: ["--node-id", "1", "--addr", "0.0.0.0:8300", "--http-addr", "0.0.0.0:8301", "--data-dir", "/app/data"]
+    container_name: aetherdb
     ports:
       - "8300:8300"
       - "8301:8301"
     volumes:
-      - aether-data-node1:/app/data
+      - aether_data:/data
+    environment:
+      - RUST_LOG=info
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8301/health"]
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      - aether-net
-
-  aether-node-2:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: aether-node-2
-    command: ["--node-id", "2", "--addr", "0.0.0.0:8310", "--http-addr", "0.0.0.0:8311", "--data-dir", "/app/data"]
-    ports:
-      - "8310:8310"
-      - "8311:8311"
-    volumes:
-      - aether-data-node2:/app/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8311/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - aether-net
-
-  aether-node-3:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: aether-node-3
-    command: ["--node-id", "3", "--addr", "0.0.0.0:8320", "--http-addr", "0.0.0.0:8321", "--data-dir", "/app/data"]
-    ports:
-      - "8320:8320"
-      - "8321:8321"
-    volumes:
-      - aether-data-node3:/app/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8321/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - aether-net
+      start_period: 2s
+    restart: unless-stopped
 
 volumes:
-  aether-data-node1:
-  aether-data-node2:
-  aether-data-node3:
-
-networks:
-  aether-net:
-    driver: bridge
+  aether_data:
+    driver: local

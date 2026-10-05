@@ -1,7 +1,7 @@
+use aether_core::error::{AetherError, Result};
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::time::Instant;
-use parking_lot::Mutex;
-use aether_core::error::{AetherError, Result};
 
 struct TokenBucket {
     tokens: f64,
@@ -63,9 +63,10 @@ impl RateLimiter {
         if bucket.try_acquire(1.0) {
             Ok(())
         } else {
-            Err(AetherError::RateLimitExceeded(
-                format!("Rate limit exceeded for tenant '{}'. Backpressure limit reached.", tenant_id)
-            ))
+            Err(AetherError::RateLimitExceeded(format!(
+                "Rate limit exceeded for tenant '{}'. Backpressure limit reached.",
+                tenant_id
+            )))
         }
     }
 }

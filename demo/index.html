@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AetherDB — Persistent AI Agent State & Memory Console</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --card-border: #1e293b;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.15);
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --code-bg: #030712;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #0f172a;
+      border-bottom: 1px solid var(--card-border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-logo {
+      font-size: 1.5rem;
+      color: var(--accent);
+    }
+
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    .brand-subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 400;
+      margin-left: 0.5rem;
+    }
+
+    .cluster-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    main {
+      flex: 1;
+      padding: 2rem;
+      max-width: 1300px;
+      margin: 0 auto;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 960px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .card-full {
+      grid-column: 1 / -1;
+    }
+
+    .card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #e2e8f0;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 0.75rem;
+    }
+
+    .card-title span.tag {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      background: rgba(56, 189, 248, 0.1);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+
+    /* Controls Grid */
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    button {
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid #334155;
+      padding: 0.6rem 1rem;
+      border-radius: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease-in-out;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    button:hover {
+      background: #334155;
+      border-color: #475569;
+    }
+
+    button.primary {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #fff;
+    }
+
+    button.primary:hover {
+      background: #0369a1;
+    }
+
+    button.danger {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+
+    button.danger:hover {
+      background: rgba(239, 68, 68, 0.3);
+    }
+
+    /* Agent Status Grid */
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .stat-box {
+      background: var(--code-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-val {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .stat-val.accent {
+      color: var(--accent);
+    }
+
+    .stat-val.success {
+      color: var(--success);
+    }
+
+    /* Memory List */
+    .memory-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    .memory-item {
+      background: var(--code-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      font-size: 0.85rem;
+      position: relative;
+    }
+
+    .memory-item:hover {
+      border-color: #334155;
+    }
+
+    .memory-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .memory-id {
+      font-family: monospace;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .memory-score {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--success);
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+
+    .memory-text {
+      color: #e2e8f0;
+      line-height: 1.4;
+    }
+
+    .memory-meta {
+      font-size: 0.7rem;
+      color: #64748b;
+      font-family: monospace;
+    }
+
+    /* Query Box */
+    .query-box {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .query-input {
+      flex: 1;
+      background: var(--code-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.5rem;
+      padding: 0.65rem 1rem;
+      color: #fff;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .query-input:focus {
+      border-color: var(--accent);
+    }
+
+    /* Log Box */
+    .log-box {
+      background: var(--code-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+      font-family: "Cascadia Code", "Fira Code", monospace;
+      font-size: 0.8rem;
+      color: #94a3b8;
+      max-height: 200px;
+      overflow-y: auto;
+      line-height: 1.5;
+    }
+
+    .log-entry {
+      margin-bottom: 0.35rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .log-ts {
+      color: #475569;
+    }
+
+    .log-msg.info { color: #38bdf8; }
+    .log-msg.success { color: #10b981; }
+    .log-msg.warn { color: #f59e0b; }
+    .log-msg.error { color: #ef4444; }
+
+    .banner-persisted {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 0.6rem 1rem;
+      border-radius: 0.5rem;
+      color: #34d399;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-logo">⚡</div>
+      <div>
+        <div class="brand-title">AetherDB</div>
+        <div class="brand-subtitle">Autonomous AI Agent Persistent Memory & State Engine</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <span class="cluster-badge">
+        <span class="pulse"></span> Connected to AetherDB Storage (Port 8301)
+      </span>
+      <span id="restartBadge" style="display: none;" class="cluster-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: #38bdf8;">
+        🔄 Cold Restarted
+      </span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Interactive Workflow Controls -->
+    <div class="card card-full">
+      <div class="card-title">
+        <span>AI Agent Operations & Demonstration Workflow</span>
+        <span class="tag">SDK Powered</span>
+      </div>
+      <div class="btn-group">
+        <button class="primary" onclick="runStep1()">1. Start & Init State</button>
+        <button class="primary" onclick="runStep2()">2. Ingest 4 Memories</button>
+        <button class="primary" onclick="runStep3()">3. Recall Knowledge</button>
+        <button class="primary" onclick="runStep4()">4. Update Task State</button>
+        <button class="primary" onclick="runStep5()">5. Consume Tokens (+128)</button>
+        <button style="background: #4338ca; border-color: #6366f1;" onclick="simulateRestart()">6. 🔄 Simulate App Restart</button>
+        <button class="danger" onclick="resetAgent()">Reset Agent</button>
+      </div>
+      <div id="persistedNotice" class="banner-persisted" style="display: none;">
+        <span>🔒</span>
+        <strong>AetherDB Persistence Guarantee:</strong>
+        <span id="persistedNoticeText">Memory and state successfully survived process restart and were restored from LSM/WAL.</span>
+      </div>
+    </div>
+
+    <!-- Agent Live Status -->
+    <div class="card">
+      <div class="card-title">
+        <span>Agent Epistemic State</span>
+        <span class="tag">POST /v1/agent/state/*</span>
+      </div>
+      <div class="status-grid">
+        <div class="stat-box">
+          <div class="stat-label">Agent ID</div>
+          <div class="stat-val accent" id="valAgentId">demo-agent-alpha</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Status</div>
+          <div class="stat-val success" id="valStatus">READY</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Current Step</div>
+          <div class="stat-val" id="valStep">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Tokens Billed</div>
+          <div class="stat-val accent" id="valTokens">0</div>
+        </div>
+      </div>
+      <div class="stat-box" style="margin-top: 0.5rem;">
+        <div class="stat-label">Active Task</div>
+        <div style="font-size: 0.9rem; color: #cbd5e1;" id="valTask">None (idle)</div>
+      </div>
+    </div>
+
+    <!-- Recall / Query Playground -->
+    <div class="card">
+      <div class="card-title">
+        <span>Semantic Memory Recall</span>
+        <span class="tag">AVX2 Cosine Search</span>
+      </div>
+      <div class="query-box">
+        <input
+          type="text"
+          id="queryInput"
+          class="query-input"
+          placeholder="Ask the agent something (e.g. 'What technologies and projects am I interested in?')"
+          value="What technologies and projects am I interested in?"
+          onkeydown="if(event.key==='Enter') executeRecall()"
+        />
+        <button class="primary" onclick="executeRecall()">Recall</button>
+      </div>
+      <div class="memory-list" id="recalledList">
+        <div style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem 0; text-align: center;">
+          Click "Recall" or "3. Recall Knowledge" to retrieve ranked memories.
+        </div>
+      </div>
+    </div>
+
+    <!-- Persistent Memories Ingested -->
+    <div class="card">
+      <div class="card-title">
+        <span>Persistent Memories Ingested</span>
+        <span class="tag" id="memoriesCountBadge">0 memories</span>
+      </div>
+      <div class="memory-list" id="ingestedList">
+        <div style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem 0; text-align: center;">
+          No memories ingested yet. Click "2. Ingest 4 Memories" to store semantic facts.
+        </div>
+      </div>
+    </div>
+
+    <!-- Real-time Agent Event Log -->
+    <div class="card">
+      <div class="card-title">
+        <span>AetherDB Agent Execution Stream</span>
+        <span class="tag">Event Log</span>
+      </div>
+      <div class="log-box" id="logContainer">
+        <div class="log-entry">
+          <span class="log-ts">[00:00:00]</span>
+          <span class="log-msg info">AI Agent dashboard ready. Connected to AetherDB client SDK.</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const AGENT_ID = "demo-agent-alpha";
+    let tokenUsage = 0;
+    let storedMemories = [];
+
+    function log(msg, type = "info") {
+      const box = document.getElementById("logContainer");
+      const entry = document.createElement("div");
+      entry.className = "log-entry";
+      const ts = new Date().toTimeString().split(" ")[0];
+      entry.innerHTML = `<span class="log-ts">[${ts}]</span> <span class="log-msg ${type}">${msg}</span>`;
+      box.appendChild(entry);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    async function apiCall(endpoint, body) {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return await res.json();
+    }
+
+    async function runStep1() {
+      log(`Initializing state for agent "${AGENT_ID}"...`, "info");
+      const res = await apiCall("/api/agent/init", { agentId: AGENT_ID });
+      document.getElementById("valStatus").innerText = (res.state.status || "READY").toUpperCase();
+      document.getElementById("valStep").innerText = res.state.step || "0";
+      document.getElementById("valTask").innerText = res.state.current_task || "None (idle)";
+      log(`Agent session initialized: ${JSON.stringify(res.state)}`, "success");
+    }
+
+    async function runStep2() {
+      log("Ingesting 4 semantic facts into AetherDB Vector + KV storage...", "info");
+      const facts = [
+        { id: "mem_pref_python", text: "The user prefers Python for AI/ML.", domain: "preferences" },
+        { id: "mem_learn_rust", text: "The user is learning Rust.", domain: "skills" },
+        { id: "mem_build_aether", text: "The user is building AetherDB.", domain: "projects" },
+        { id: "mem_interest_agents", text: "The user is interested in autonomous AI agents.", domain: "interests" },
+      ];
+
+      const res = await apiCall("/api/agent/remember-batch", { agentId: AGENT_ID, facts });
+      storedMemories = facts;
+      renderIngestedList();
+      log(`Stored 4 memories with 16-dim SIMD embeddings.`, "success");
+    }
+
+    function renderIngestedList() {
+      const container = document.getElementById("ingestedList");
+      document.getElementById("memoriesCountBadge").innerText = `${storedMemories.length} memories`;
+      if (storedMemories.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem 0; text-align: center;">No memories stored.</div>';
+        return;
+      }
+      container.innerHTML = storedMemories.map(m => `
+        <div class="memory-item">
+          <div class="memory-header">
+            <span class="memory-id">${m.id}</span>
+            <span class="memory-meta">domain: ${m.domain || "general"}</span>
+          </div>
+          <div class="memory-text">${m.text}</div>
+        </div>
+      `).join("");
+    }
+
+    async function executeRecall() {
+      const query = document.getElementById("queryInput").value.trim();
+      if (!query) return;
+      log(`Executing semantic recall for: "${query}"...`, "info");
+      const res = await apiCall("/api/agent/recall", { agentId: AGENT_ID, query, topK: 4 });
+      renderRecalledList(res.results || []);
+      log(`Recalled ${res.results?.length || 0} ranked memories from AetherDB.`, "success");
+    }
+
+    function runStep3() {
+      document.getElementById("queryInput").value = "What technologies and projects am I interested in?";
+      executeRecall();
+    }
+
+    function renderRecalledList(results) {
+      const container = document.getElementById("recalledList");
+      if (!results || results.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem 0; text-align: center;">No matches found.</div>';
+        return;
+      }
+      container.innerHTML = results.map((r, i) => `
+        <div class="memory-item">
+          <div class="memory-header">
+            <span class="memory-id">#${i + 1} ${r.memoryId || r.id}</span>
+            <span class="memory-score">${(r.score * 100).toFixed(1)}% match</span>
+          </div>
+          <div class="memory-text">${r.text}</div>
+          <div class="memory-meta">${JSON.stringify(r.metadata || {})}</div>
+        </div>
+      `).join("");
+    }
+
+    async function runStep4() {
+      log("Updating agent task execution state...", "info");
+      const newState = {
+        status: "running",
+        current_task: "answer user question",
+        step: 1,
+        last_query: document.getElementById("queryInput").value,
+        updated_at: new Date().toISOString()
+      };
+      const res = await apiCall("/api/agent/update-state", { agentId: AGENT_ID, state: newState });
+      document.getElementById("valStatus").innerText = "RUNNING";
+      document.getElementById("valStep").innerText = "1";
+      document.getElementById("valTask").innerText = "answer user question";
+      log(`Updated state in AetherDB: step=1, status=running, task='answer user question'`, "success");
+    }
+
+    async function runStep5() {
+      log("Atomically consuming +128 inference tokens via AetherDB INCR...", "info");
+      const res = await apiCall("/api/agent/incr-tokens", { agentId: AGENT_ID, amount: 128 });
+      tokenUsage = res.tokens;
+      document.getElementById("valTokens").innerText = tokenUsage;
+      log(`Tokens atomically updated to ${tokenUsage}`, "success");
+    }
+
+    async function simulateRestart() {
+      log("🔄 SIMULATING PROCESS CRASH & RESTART...", "warn");
+      document.getElementById("valStatus").innerText = "RESTARTING...";
+      
+      const res = await apiCall("/api/agent/restart", { agentId: AGENT_ID });
+      
+      document.getElementById("restartBadge").style.display = "inline-flex";
+      document.getElementById("persistedNotice").style.display = "flex";
+      
+      if (res.state) {
+        document.getElementById("valStatus").innerText = (res.state.status || "READY").toUpperCase();
+        document.getElementById("valStep").innerText = res.state.step || "0";
+        document.getElementById("valTask").innerText = res.state.current_task || "None (idle)";
+      }
+      document.getElementById("valTokens").innerText = res.tokens || 0;
+      
+      if (res.memories && res.memories.length > 0) {
+        storedMemories = res.memories;
+        renderIngestedList();
+      }
+
+      log(`✓ REBOOT COMPLETE: Restored state & ${res.tokens || 0} tokens directly from AetherDB persistent LSM/WAL.`, "success");
+    }
+
+    async function resetAgent() {
+      log("Clearing agent session and tokens in AetherDB...", "warn");
+      await apiCall("/api/agent/reset", { agentId: AGENT_ID });
+      document.getElementById("valStatus").innerText = "IDLE";
+      document.getElementById("valStep").innerText = "0";
+      document.getElementById("valTokens").innerText = "0";
+      document.getElementById("valTask").innerText = "None (idle)";
+      document.getElementById("persistedNotice").style.display = "none";
+      document.getElementById("restartBadge").style.display = "none";
+      document.getElementById("recalledList").innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 1rem 0; text-align: center;">Memory cleared.</div>';
+      log("Agent state reset successfully.", "info");
+    }
+
+    // Initialize on page load
+    window.addEventListener("DOMContentLoaded", () => {
+      runStep1();
+    });
+  </script>
+</body>
+</html>

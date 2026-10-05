@@ -1,10 +1,41 @@
 {
   "name": "@aetherdb/sdk",
   "version": "0.1.0",
-  "description": "Unified TypeScript / JavaScript Client SDK for AetherDB (KV + Vector + Atomic State)",
+  "description": "Unified TypeScript / JavaScript Client SDK for AetherDB (Persistent State + Semantic Memory for AI Agents)",
   "main": "index.js",
   "types": "index.d.ts",
-  "keywords": ["database", "vector", "cache", "ai", "agents", "serverless"],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/sdk.test.js",
+    "typecheck": "tsc --noEmit index.d.ts"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "aetherdb",
+    "ai-agent",
+    "semantic-memory",
+    "vector-database",
+    "persistent-state",
+    "llm-memory",
+    "hnsw",
+    "distributed-database"
+  ],
   "author": "AetherDB Team",
-  "license": "MIT"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
+  }
 }

@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use std::sync::Arc;
+use crate::mvcc::MvccEngine;
 use aether_core::error::Result;
 use aether_core::hlc::{HlcTimestamp, HybridLogicalClock};
 use aether_core::types::TxnId;
-use crate::mvcc::MvccEngine;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 pub struct Transaction {
     pub txn_id: TxnId,
@@ -55,13 +55,8 @@ impl TxnCoordinator {
 
         // 1. Phase 1: Prewrite all keys
         for (key, val) in &txn.writes {
-            self.mvcc.prewrite(
-                txn.txn_id,
-                key,
-                val.clone(),
-                &primary_key,
-                txn.start_ts,
-            )?;
+            self.mvcc
+                .prewrite(txn.txn_id, key, val.clone(), &primary_key, txn.start_ts)?;
         }
 
         // 2. Obtain Commit Timestamp
@@ -75,7 +70,8 @@ impl TxnCoordinator {
         // 4. Commit Secondaries
         for (key, val) in &txn.writes {
             if key != &primary_key {
-                self.mvcc.commit(key, txn.start_ts, commit_ts, val.clone())?;
+                self.mvcc
+                    .commit(key, txn.start_ts, commit_ts, val.clone())?;
             }
         }
 
@@ -86,8 +82,8 @@ impl TxnCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use aether_storage::StorageEngine;
+    use tempfile::tempdir;
 
     #[test]
     fn test_distributed_2pc_transaction_lifecycle() {

@@ -1,8 +1,8 @@
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, HashSet};
 use parking_lot::RwLock;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use aether_core::error::Result;
 
@@ -19,7 +19,9 @@ impl Eq for DistNode {}
 impl Ord for DistNode {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse for min-heap behavior in BinaryHeap (or natural for max-heap)
-        self.dist.partial_cmp(&other.dist).unwrap_or(Ordering::Equal)
+        self.dist
+            .partial_cmp(&other.dist)
+            .unwrap_or(Ordering::Equal)
     }
 }
 
@@ -160,7 +162,7 @@ impl HnswIndex {
         for l in (0..=top_l).rev() {
             let candidates = self.search_layer_internal(&q, curr_obj, self.ef_construction, l);
             let m_max = if l == 0 { self.m0 } else { self.m };
-            
+
             // Select M closest neighbors
             let neighbors = self.select_neighbors(&candidates, m_max);
 
@@ -197,14 +199,20 @@ impl HnswIndex {
     ) -> Vec<DistNode> {
         let mut visited = HashSet::new();
         let mut candidates = BinaryHeap::new(); // Min-heap (closest on top)
-        let mut w = BinaryHeap::new();          // Max-heap (furthest on top) to maintain top-ef
+        let mut w = BinaryHeap::new(); // Max-heap (furthest on top) to maintain top-ef
 
         let ep_dist = self.dist(query, ep);
         visited.insert(ep);
 
         // For min-heap, we negate dist or use Custom struct
-        candidates.push(std::cmp::Reverse(DistNode { dist: ep_dist, node: ep }));
-        w.push(DistNode { dist: ep_dist, node: ep });
+        candidates.push(std::cmp::Reverse(DistNode {
+            dist: ep_dist,
+            node: ep,
+        }));
+        w.push(DistNode {
+            dist: ep_dist,
+            node: ep,
+        });
 
         while let Some(std::cmp::Reverse(c)) = candidates.pop() {
             let furthest_w_dist = w.peek().unwrap().dist;
@@ -219,8 +227,14 @@ impl HnswIndex {
                         let d = self.dist(query, neighbor);
 
                         if d < furthest_w_dist || w.len() < ef {
-                            candidates.push(std::cmp::Reverse(DistNode { dist: d, node: neighbor }));
-                            w.push(DistNode { dist: d, node: neighbor });
+                            candidates.push(std::cmp::Reverse(DistNode {
+                                dist: d,
+                                node: neighbor,
+                            }));
+                            w.push(DistNode {
+                                dist: d,
+                                node: neighbor,
+                            });
 
                             if w.len() > ef {
                                 w.pop();
@@ -305,6 +319,55 @@ impl HnswIndex {
         self.vectors.len()
     }
 
+    /// Top-K search restricted to keys starting with `key_prefix` and vectors whose
+    /// dimension matches the query. Over-fetches candidates so filtering still returns
+    /// up to `top_k` results in the common case.
+    pub fn search_filtered(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        key_prefix: &str,
+    ) -> Vec<(String, f32, Option<String>)> {
+        if self.vectors.is_empty() || self.entry_point.is_none() {
+            return Vec::new();
+        }
+        let mut curr_obj = self.entry_point.unwrap();
+        for l in (1..=self.max_layer).rev() {
+            let mut changed = true;
+            while changed {
+                changed = false;
+                let curr_dist = self.dist(query, curr_obj);
+                if let Some(neighbors) = self.layers[l].get(curr_obj as usize) {
+                    for &neighbor in neighbors {
+                        let d = self.dist(query, neighbor);
+                        if d < curr_dist {
+                            curr_obj = neighbor;
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        let ef = self.ef_search.max(top_k * 10).max(64);
+        self.search_layer_internal(query, curr_obj, ef, 0)
+            .into_iter()
+            .filter(|dn| {
+                let i = dn.node as usize;
+                self.vectors[i].len() == query.len() && self.id_to_key[i].starts_with(key_prefix)
+            })
+            .take(top_k)
+            .map(|dn| {
+                let i = dn.node as usize;
+                (
+                    self.id_to_key[i].clone(),
+                    1.0 - dn.dist,
+                    self.metadata[i].clone(),
+                )
+            })
+            .collect()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.vectors.is_empty()
     }
@@ -330,6 +393,15 @@ impl ConcurrentHnswIndex {
         self.inner.read().search(query, top_k)
     }
 
+    pub fn search_filtered(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        key_prefix: &str,
+    ) -> Vec<(String, f32, Option<String>)> {
+        self.inner.read().search_filtered(query, top_k, key_prefix)
+    }
+
     pub fn len(&self) -> usize {
         self.inner.read().len()
     }
@@ -347,9 +419,15 @@ mod tests {
     fn test_hnsw_basic_insert_and_search() {
         let mut index = HnswIndex::new(8, 32, 16);
 
-        index.insert("doc_1", vec![1.0, 0.0, 0.0, 0.0], Some("math".into())).unwrap();
-        index.insert("doc_2", vec![0.9, 0.1, 0.0, 0.0], Some("physics".into())).unwrap();
-        index.insert("doc_3", vec![0.0, 0.0, 1.0, 0.0], Some("art".into())).unwrap();
+        index
+            .insert("doc_1", vec![1.0, 0.0, 0.0, 0.0], Some("math".into()))
+            .unwrap();
+        index
+            .insert("doc_2", vec![0.9, 0.1, 0.0, 0.0], Some("physics".into()))
+            .unwrap();
+        index
+            .insert("doc_3", vec![0.0, 0.0, 1.0, 0.0], Some("art".into()))
+            .unwrap();
 
         let query = vec![0.95, 0.05, 0.0, 0.0];
         let results = index.search(&query, 2);

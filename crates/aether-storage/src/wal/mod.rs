@@ -1,9 +1,9 @@
+use aether_core::error::{AetherError, Result};
+use aether_core::types::ValueState;
+use crc32fast::Hasher;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
-use crc32fast::Hasher;
-use aether_core::error::{AetherError, Result};
-use aether_core::types::ValueState;
 
 pub const WAL_RECORD_PUT: u8 = 1;
 pub const WAL_RECORD_DELETE: u8 = 2;

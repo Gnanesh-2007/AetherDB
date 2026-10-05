@@ -1,7 +1,7 @@
+use aether_core::types::ValueState;
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::Mutex;
-use aether_core::types::ValueState;
 
 type BlockData = Arc<Vec<(Vec<u8>, ValueState)>>;
 

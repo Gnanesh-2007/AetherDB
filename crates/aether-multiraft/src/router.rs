@@ -1,7 +1,7 @@
-use std::collections::BTreeMap;
-use parking_lot::RwLock;
 use aether_core::error::{AetherError, Result};
 use aether_core::types::RangeKey;
+use parking_lot::RwLock;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 pub struct RangeDescriptor {
@@ -35,7 +35,7 @@ impl RangeRouter {
     /// Finds the range responsible for a given key in O(log R) time.
     pub fn route_key(&self, key: &[u8]) -> Result<RangeDescriptor> {
         let ranges = self.ranges.read();
-        
+
         // Find the range whose start_key <= key
         let mut candidate = None;
         for (start_key, desc) in ranges.iter() {
@@ -50,7 +50,12 @@ impl RangeRouter {
     }
 
     /// Splits a range at `split_key` atomically into two child ranges.
-    pub fn split_range(&self, old_range_id: u64, split_key: Vec<u8>, new_range_id: u64) -> Result<()> {
+    pub fn split_range(
+        &self,
+        old_range_id: u64,
+        split_key: Vec<u8>,
+        new_range_id: u64,
+    ) -> Result<()> {
         let mut ranges = self.ranges.write();
 
         let target_start = ranges

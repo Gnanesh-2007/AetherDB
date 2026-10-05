@@ -1,28 +1,48 @@
+# Rust build target
 /target
 **/*.rs.bk
 Cargo.lock
 
-# Data directories
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Runtime & Production Data Directories
+data_production/
 data_node*
-ci_data
+data_*
+ci_data/
 *.db
 *.wal
 *.sst
+*.log
+logs/
 
 # Node / JS
 node_modules/
 package-lock.json
 
-# Python
+# Python caches & packaging
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
-# IDE & OS
+# IDE & OS files
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+
+# Binaries & Temporary validation files
+cloudflared*
+*.exe
+scripts/.restart_expect.json
+*.tmp

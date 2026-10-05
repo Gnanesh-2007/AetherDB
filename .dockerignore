@@ -1,0 +1,8 @@
+target/
+node_modules/
+sdks/js/node_modules/
+.git/
+.gitignore
+*.log
+.aether.pid
+data_node*

@@ -3,9 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::info;
 
+use crate::sstable::{SSTableReader, SSTableWriter};
 use aether_core::error::Result;
 use aether_core::types::ValueState;
-use crate::sstable::{SSTableReader, SSTableWriter};
 
 pub struct Compactor;
 
@@ -62,7 +62,11 @@ impl Compactor {
             }
         }
 
-        info!("🧹 Compaction completed: merged {} SSTables into {:?}", sstable_paths.len(), output_path);
+        info!(
+            "🧹 Compaction completed: merged {} SSTables into {:?}",
+            sstable_paths.len(),
+            output_path
+        );
         Ok(Some(output_path))
     }
 }
@@ -82,27 +86,32 @@ mod tests {
         // SSTable 1: k1="v1", k2="v2", k3="v3"
         {
             let mut w1 = SSTableWriter::create(&sst1_path).unwrap();
-            w1.append(b"k1".to_vec(), ValueState::Some(b"v1".to_vec())).unwrap();
-            w1.append(b"k2".to_vec(), ValueState::Some(b"v2".to_vec())).unwrap();
-            w1.append(b"k3".to_vec(), ValueState::Some(b"v3".to_vec())).unwrap();
+            w1.append(b"k1".to_vec(), ValueState::Some(b"v1".to_vec()))
+                .unwrap();
+            w1.append(b"k2".to_vec(), ValueState::Some(b"v2".to_vec()))
+                .unwrap();
+            w1.append(b"k3".to_vec(), ValueState::Some(b"v3".to_vec()))
+                .unwrap();
             w1.finish().unwrap();
         }
 
         // SSTable 2: k1="v1_updated", k2=Tombstone (deleted)
         {
             let mut w2 = SSTableWriter::create(&sst2_path).unwrap();
-            w2.append(b"k1".to_vec(), ValueState::Some(b"v1_updated".to_vec())).unwrap();
+            w2.append(b"k1".to_vec(), ValueState::Some(b"v1_updated".to_vec()))
+                .unwrap();
             w2.append(b"k2".to_vec(), ValueState::Tombstone).unwrap();
             w2.finish().unwrap();
         }
 
         // Compact SSTable 1 + SSTable 2
-        let res = Compactor::compact(&[sst1_path.clone(), sst2_path.clone()], &compacted_path).unwrap();
+        let res =
+            Compactor::compact(&[sst1_path.clone(), sst2_path.clone()], &compacted_path).unwrap();
         assert!(res.is_some());
 
         // Verify compacted SSTable contents
         let mut reader = SSTableReader::open(&compacted_path).unwrap();
-        
+
         // k1 should have updated value
         assert_eq!(
             reader.get(b"k1").unwrap(),

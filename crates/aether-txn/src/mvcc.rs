@@ -1,9 +1,9 @@
-use std::sync::Arc;
 use aether_core::error::{AetherError, Result};
 use aether_core::hlc::HlcTimestamp;
 use aether_core::key::MvccKey;
 use aether_core::types::{TxnId, ValueState};
 use aether_storage::StorageEngine;
+use std::sync::Arc;
 
 pub struct MvccEngine {
     storage: Arc<StorageEngine>,
@@ -19,12 +19,10 @@ impl MvccEngine {
         match self.storage.get_mvcc(user_key, snapshot_ts)? {
             Some(ValueState::Some(val)) => Ok(Some(val)),
             Some(ValueState::Tombstone) => Ok(None),
-            Some(ValueState::Intent { txn_id, .. }) => {
-                Err(AetherError::TxnConflict(
-                    String::from_utf8_lossy(user_key).to_string(),
-                    txn_id,
-                ))
-            }
+            Some(ValueState::Intent { txn_id, .. }) => Err(AetherError::TxnConflict(
+                String::from_utf8_lossy(user_key).to_string(),
+                txn_id,
+            )),
             None => Ok(None),
         }
     }
@@ -42,7 +40,11 @@ impl MvccEngine {
         let encoded_key = mvcc_key.encode();
 
         // Check if already locked
-        if let Some(ValueState::Intent { txn_id: existing_id, .. }) = self.storage.get(&encoded_key)? {
+        if let Some(ValueState::Intent {
+            txn_id: existing_id,
+            ..
+        }) = self.storage.get(&encoded_key)?
+        {
             if existing_id != txn_id {
                 return Err(AetherError::TxnConflict(
                     String::from_utf8_lossy(user_key).to_string(),

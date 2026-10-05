@@ -2,8 +2,8 @@ use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-use aether_core::error::{AetherError, Result};
 use crate::protocol::{Request, Response};
+use aether_core::error::{AetherError, Result};
 
 pub struct AetherClient {
     stream: TcpStream,
@@ -59,7 +59,13 @@ impl AetherClient {
     }
 
     pub async fn set(&mut self, key: impl Into<Vec<u8>>, value: impl Into<Vec<u8>>) -> Result<()> {
-        match self.send(Request::Set { key: key.into(), value: value.into() }).await? {
+        match self
+            .send(Request::Set {
+                key: key.into(),
+                value: value.into(),
+            })
+            .await?
+        {
             Response::Ok => Ok(()),
             Response::Error(e) => Err(AetherError::Corruption(e)),
             _ => Err(AetherError::Corruption("Unexpected response".to_string())),

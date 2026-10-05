@@ -1,6 +1,6 @@
+use clap::Parser;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use clap::Parser;
 use tracing::info;
 use tracing_subscriber::FmtSubscriber;
 
@@ -28,7 +28,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let metering = Arc::new(MeteringEngine::new());
 
     let server = AetherCloudServer::new(args.addr, tenants, keys, metering);
-    info!("⚡ AetherCloud Developer Portal online at http://{}", args.addr);
+    info!(
+        "⚡ AetherCloud Developer Portal online at http://{}",
+        args.addr
+    );
     server.run().await?;
 
     Ok(())

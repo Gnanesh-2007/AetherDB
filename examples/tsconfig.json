@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "typeRoots": ["../sdks/js/node_modules/@types"],
+    "types": ["node"]
+  },
+  "include": ["agent-memory.ts"]
+}

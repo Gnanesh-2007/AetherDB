@@ -1,7 +1,7 @@
+use rand::Rng;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::tempdir;
-use rand::Rng;
 
 use aether_core::hlc::HybridLogicalClock;
 use aether_storage::StorageEngine;
@@ -73,7 +73,8 @@ fn test_crash_consistency_state_machine_differential_fuzzing() {
             for (key, expected_val) in &reference_state {
                 let actual_val = coordinator.get(&read_txn, key).unwrap();
                 assert_eq!(
-                    &actual_val, expected_val,
+                    &actual_val,
+                    expected_val,
                     "Crash consistency invariant violated at step {} for key {:?}",
                     step,
                     String::from_utf8_lossy(key)
@@ -87,7 +88,8 @@ fn test_crash_consistency_state_machine_differential_fuzzing() {
     for (key, expected_val) in &reference_state {
         let actual_val = coordinator.get(&final_txn, key).unwrap();
         assert_eq!(
-            &actual_val, expected_val,
+            &actual_val,
+            expected_val,
             "Final state differential mismatch for key {:?}",
             String::from_utf8_lossy(key)
         );

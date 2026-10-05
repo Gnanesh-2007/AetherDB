@@ -1,17 +1,39 @@
+use parking_lot::{Mutex, RwLock};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use parking_lot::{Mutex, RwLock};
 
-use aether_core::error::{AetherError, Result};
-use aether_core::types::ValueState;
-use aether_vector::ConcurrentHnswIndex;
 use crate::cache::BlockCache;
 use crate::compaction::Compactor;
 use crate::memtable::MemTable;
 use crate::sstable::{SSTableReader, SSTableWriter};
 use crate::wal::WriteAheadLog;
+use aether_core::error::{AetherError, Result};
+use aether_core::types::ValueState;
+use aether_vector::ConcurrentHnswIndex;
+
+pub struct KeyLockStripes {
+    locks: Vec<parking_lot::Mutex<()>>,
+}
+
+impl KeyLockStripes {
+    pub fn new(num_stripes: usize) -> Self {
+        let mut locks = Vec::with_capacity(num_stripes);
+        for _ in 0..num_stripes {
+            locks.push(parking_lot::Mutex::new(()));
+        }
+        Self { locks }
+    }
+
+    pub fn lock(&self, key: &[u8]) -> parking_lot::MutexGuard<'_, ()> {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hash::hash_slice(key, &mut hasher);
+        let hash = std::hash::Hasher::finish(&hasher);
+        let idx = (hash as usize) % self.locks.len();
+        self.locks[idx].lock()
+    }
+}
 
 pub struct StorageEngine {
     data_dir: PathBuf,
@@ -22,6 +44,7 @@ pub struct StorageEngine {
     next_sstable_id: AtomicU64,
     hnsw_index: Arc<ConcurrentHnswIndex>,
     block_cache: Arc<BlockCache>,
+    key_locks: KeyLockStripes,
 }
 
 impl StorageEngine {
@@ -39,7 +62,9 @@ impl StorageEngine {
         for (k, v) in recovered_entries {
             if k.starts_with(b"__vec:") {
                 if let ValueState::Some(bytes) = &v {
-                    if let Ok((vec, meta)) = bincode::deserialize::<(Vec<f32>, Option<String>)>(bytes) {
+                    if let Ok((vec, meta)) =
+                        bincode::deserialize::<(Vec<f32>, Option<String>)>(bytes)
+                    {
                         let id = String::from_utf8_lossy(&k[6..]).to_string();
                         let _ = hnsw_index.insert(&id, vec, meta);
                     }
@@ -61,7 +86,29 @@ impl StorageEngine {
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                         if let Ok(id) = stem.parse::<u64>() {
                             max_id = max_id.max(id);
-                            sstables.push(path);
+                            sstables.push(path.clone());
+
+                            // Pre-populate HNSW index with vectors stored in SSTable files
+                            if let Ok(mut reader) = SSTableReader::open(&path) {
+                                if let Ok(entries) = reader.scan_all() {
+                                    for (k, v) in entries {
+                                        if k.starts_with(b"__vec:") {
+                                            if let ValueState::Some(bytes) = &v {
+                                                if let Ok((vec, meta)) = bincode::deserialize::<(
+                                                    Vec<f32>,
+                                                    Option<String>,
+                                                )>(
+                                                    bytes
+                                                ) {
+                                                    let id_str = String::from_utf8_lossy(&k[6..])
+                                                        .to_string();
+                                                    let _ = hnsw_index.insert(&id_str, vec, meta);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -78,6 +125,7 @@ impl StorageEngine {
             next_sstable_id: AtomicU64::new(max_id + 1),
             hnsw_index,
             block_cache,
+            key_locks: KeyLockStripes::new(256),
         })
     }
 
@@ -101,7 +149,11 @@ impl StorageEngine {
     }
 
     /// MVCC snapshot point lookup: finds the latest committed version <= snapshot_ts.
-    pub fn get_mvcc(&self, user_key: &[u8], snapshot_ts: aether_core::hlc::HlcTimestamp) -> Result<Option<ValueState>> {
+    pub fn get_mvcc(
+        &self,
+        user_key: &[u8],
+        snapshot_ts: aether_core::hlc::HlcTimestamp,
+    ) -> Result<Option<ValueState>> {
         // 1. Search Active MemTable
         for (k, v) in self.active_memtable.read().iter() {
             if let Ok(mvcc_k) = aether_core::key::MvccKey::decode(&k) {
@@ -199,7 +251,9 @@ impl StorageEngine {
         }
 
         let compacted_id = self.next_sstable_id.fetch_add(1, Ordering::SeqCst);
-        let compacted_path = self.data_dir.join(format!("{:05}_compacted.sst", compacted_id));
+        let compacted_path = self
+            .data_dir
+            .join(format!("{:05}_compacted.sst", compacted_id));
 
         let result = Compactor::compact(&current_sstables, &compacted_path)?;
         if let Some(final_path) = result {
@@ -217,6 +271,8 @@ impl StorageEngine {
 
     /// Atomic integer increment (used for token quotas, rate limiters, sequence counters).
     pub fn incr(&self, key: Vec<u8>, delta: i64) -> Result<i64> {
+        let _guard = self.key_locks.lock(&key);
+
         let current_val = match self.get(&key)? {
             Some(ValueState::Some(bytes)) => {
                 let s = String::from_utf8_lossy(&bytes);
@@ -231,7 +287,12 @@ impl StorageEngine {
     }
 
     /// Stores a high-dimensional vector with optional JSON metadata into both LSM storage and HNSW graph index.
-    pub fn upsert_vector(&self, id: &str, vector: Vec<f32>, metadata: Option<String>) -> Result<()> {
+    pub fn upsert_vector(
+        &self,
+        id: &str,
+        vector: Vec<f32>,
+        metadata: Option<String>,
+    ) -> Result<()> {
         let key = format!("__vec:{}", id).into_bytes();
         let payload = (vector.clone(), metadata.clone());
         let val_bytes = bincode::serialize(&payload)
@@ -246,29 +307,58 @@ impl StorageEngine {
     }
 
     /// High-performance Vector search utilizing HNSW graph indexing when available, with flat scan fallback.
-    pub fn search_vector(&self, query_vector: &[f32], top_k: usize) -> Result<Vec<(String, f32, Option<String>)>> {
+    pub fn search_vector(
+        &self,
+        query_vector: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<(String, f32, Option<String>)>> {
+        self.search_vector_filtered(query_vector, top_k, None)
+    }
+
+    /// Vector search with optional key prefix filtering (used for multi-tenant isolation).
+    pub fn search_vector_filtered(
+        &self,
+        query_vector: &[f32],
+        top_k: usize,
+        key_prefix: Option<&str>,
+    ) -> Result<Vec<(String, f32, Option<String>)>> {
         if !self.hnsw_index.is_empty() {
-            let results = self.hnsw_index.search(query_vector, top_k);
+            let results = match key_prefix {
+                Some(p) => self.hnsw_index.search_filtered(query_vector, top_k, p),
+                None => self.hnsw_index.search(query_vector, top_k),
+            };
             if !results.is_empty() {
                 return Ok(results);
             }
         }
 
         // Fallback: Exact Flat SIMD Brute-Force scan over MemTable
-        self.search_vector_flat(query_vector, top_k)
+        self.search_vector_flat_filtered(query_vector, top_k, key_prefix)
     }
 
-    /// Exact SIMD-accelerated Cosine Nearest Neighbor search over stored vectors.
-    pub fn search_vector_flat(&self, query_vector: &[f32], top_k: usize) -> Result<Vec<(String, f32, Option<String>)>> {
+    /// Exact SIMD-accelerated Cosine Nearest Neighbor search over stored vectors with optional prefix filter.
+    pub fn search_vector_flat_filtered(
+        &self,
+        query_vector: &[f32],
+        top_k: usize,
+        key_prefix: Option<&str>,
+    ) -> Result<Vec<(String, f32, Option<String>)>> {
         let mut candidates = Vec::new();
 
         // Scan all vector entries from active MemTable
         for (k, v) in self.active_memtable.read().iter() {
             if k.starts_with(b"__vec:") {
+                let id = String::from_utf8_lossy(&k[6..]).to_string();
+                if let Some(prefix) = key_prefix {
+                    if !id.starts_with(prefix) {
+                        continue;
+                    }
+                }
                 if let ValueState::Some(bytes) = v {
-                    if let Ok((vec, meta)) = bincode::deserialize::<(Vec<f32>, Option<String>)>(&bytes) {
+                    if let Ok((vec, meta)) =
+                        bincode::deserialize::<(Vec<f32>, Option<String>)>(&bytes)
+                    {
                         if query_vector.len() == vec.len() {
-                            let id = String::from_utf8_lossy(&k[6..]).to_string();
                             let score = aether_simd::cosine_similarity(query_vector, &vec);
                             candidates.push((id, score, meta));
                         }
@@ -282,6 +372,14 @@ impl StorageEngine {
         candidates.truncate(top_k);
 
         Ok(candidates)
+    }
+
+    pub fn search_vector_flat(
+        &self,
+        query_vector: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<(String, f32, Option<String>)>> {
+        self.search_vector_flat_filtered(query_vector, top_k, None)
     }
 }
 
@@ -327,22 +425,62 @@ mod tests {
         let engine = StorageEngine::open(dir.path()).unwrap();
 
         // 1. Vector Upsert & HNSW Search
-        engine.upsert_vector("doc_1", vec![1.0, 0.0, 0.0, 0.0], Some("meta1".into())).unwrap();
-        engine.upsert_vector("doc_2", vec![0.9, 0.1, 0.0, 0.0], Some("meta2".into())).unwrap();
+        engine
+            .upsert_vector("doc_1", vec![1.0, 0.0, 0.0, 0.0], Some("meta1".into()))
+            .unwrap();
+        engine
+            .upsert_vector("doc_2", vec![0.9, 0.1, 0.0, 0.0], Some("meta2".into()))
+            .unwrap();
 
         let search_res = engine.search_vector(&[0.95, 0.05, 0.0, 0.0], 2).unwrap();
         assert_eq!(search_res.len(), 2);
         assert_eq!(search_res[0].0, "doc_1");
 
         // 2. Compaction trigger
-        engine.put(b"k1".to_vec(), ValueState::Some(b"v1".to_vec())).unwrap();
+        engine
+            .put(b"k1".to_vec(), ValueState::Some(b"v1".to_vec()))
+            .unwrap();
         engine.flush_active_memtable().unwrap();
 
-        engine.put(b"k1".to_vec(), ValueState::Some(b"v1_new".to_vec())).unwrap();
+        engine
+            .put(b"k1".to_vec(), ValueState::Some(b"v1_new".to_vec()))
+            .unwrap();
         engine.flush_active_memtable().unwrap();
 
         let comp_res = engine.trigger_compaction().unwrap();
         assert!(comp_res.is_some());
-        assert_eq!(engine.get(b"k1").unwrap(), Some(ValueState::Some(b"v1_new".to_vec())));
+        assert_eq!(
+            engine.get(b"k1").unwrap(),
+            Some(ValueState::Some(b"v1_new".to_vec()))
+        );
+    }
+
+    #[test]
+    fn test_concurrent_atomic_incr() {
+        let dir = tempdir().unwrap();
+        let engine = Arc::new(StorageEngine::open(dir.path()).unwrap());
+
+        let mut handles = Vec::new();
+        // Spawn 20 threads, each doing 50 increments = 1,000 total increments
+        for _ in 0..20 {
+            let eng = engine.clone();
+            handles.push(std::thread::spawn(move || {
+                for _ in 0..50 {
+                    eng.incr(b"shared_counter".to_vec(), 1).unwrap();
+                }
+            }));
+        }
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        let val = engine.get(b"shared_counter").unwrap();
+        if let Some(ValueState::Some(bytes)) = val {
+            let s = String::from_utf8_lossy(&bytes);
+            assert_eq!(s.parse::<i64>().unwrap(), 1000);
+        } else {
+            panic!("shared_counter key not found");
+        }
     }
 }

@@ -1,6 +1,6 @@
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
-use rand::Rng;
 use parking_lot::RwLock;
+use rand::Rng;
+use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 const MAX_HEIGHT: usize = 16;
 const PROBABILITY: f64 = 0.5;
@@ -42,8 +42,14 @@ pub struct ConcurrentSkipList<K: Ord + Clone + Default, V: Clone + Default> {
     write_lock: RwLock<()>,
 }
 
-unsafe impl<K: Ord + Clone + Default + Send, V: Clone + Default + Send> Send for ConcurrentSkipList<K, V> {}
-unsafe impl<K: Ord + Clone + Default + Sync, V: Clone + Default + Sync> Sync for ConcurrentSkipList<K, V> {}
+unsafe impl<K: Ord + Clone + Default + Send, V: Clone + Default + Send> Send
+    for ConcurrentSkipList<K, V>
+{
+}
+unsafe impl<K: Ord + Clone + Default + Sync, V: Clone + Default + Sync> Sync
+    for ConcurrentSkipList<K, V>
+{
+}
 
 impl<K: Ord + Clone + Default, V: Clone + Default> ConcurrentSkipList<K, V> {
     pub fn new() -> Self {

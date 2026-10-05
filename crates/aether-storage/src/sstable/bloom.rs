@@ -74,7 +74,11 @@ mod tests {
 
     #[test]
     fn test_bloom_filter() {
-        let keys = vec![b"apple".as_slice(), b"banana".as_slice(), b"cherry".as_slice()];
+        let keys = vec![
+            b"apple".as_slice(),
+            b"banana".as_slice(),
+            b"cherry".as_slice(),
+        ];
         let filter = BloomFilter::build(&keys, 10);
 
         assert!(filter.may_contain(b"apple"));

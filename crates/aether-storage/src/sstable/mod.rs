@@ -1,9 +1,9 @@
 pub mod bloom;
 
+use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 
 use aether_core::error::{AetherError, Result};
 use aether_core::types::ValueState;
@@ -168,7 +168,9 @@ impl SSTableReader {
             .len();
 
         if file_len < 16 {
-            return Err(AetherError::Corruption("SSTable file too small".to_string()));
+            return Err(AetherError::Corruption(
+                "SSTable file too small".to_string(),
+            ));
         }
 
         // Read Magic & Footer Size from the end of file
@@ -223,7 +225,10 @@ impl SSTableReader {
         }
 
         // Binary search the block index to find the candidate block
-        let block_idx = match self.index.binary_search_by(|bm| bm.last_key.as_slice().cmp(key)) {
+        let block_idx = match self
+            .index
+            .binary_search_by(|bm| bm.last_key.as_slice().cmp(key))
+        {
             Ok(idx) => idx,
             Err(idx) => {
                 if idx < self.index.len() {

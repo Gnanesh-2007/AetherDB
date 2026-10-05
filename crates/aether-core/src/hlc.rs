@@ -1,7 +1,7 @@
-use std::cmp::{max, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::cmp::{max, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{AetherError, Result};
 
@@ -16,8 +16,14 @@ pub struct HlcTimestamp {
 }
 
 impl HlcTimestamp {
-    pub const MIN: HlcTimestamp = HlcTimestamp { physical: 0, logical: 0 };
-    pub const MAX: HlcTimestamp = HlcTimestamp { physical: u64::MAX, logical: u32::MAX };
+    pub const MIN: HlcTimestamp = HlcTimestamp {
+        physical: 0,
+        logical: 0,
+    };
+    pub const MAX: HlcTimestamp = HlcTimestamp {
+        physical: u64::MAX,
+        logical: u32::MAX,
+    };
 
     pub fn new(physical: u64, logical: u32) -> Self {
         Self { physical, logical }

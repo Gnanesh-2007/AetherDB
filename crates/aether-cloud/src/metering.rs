@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProjectUsage {
@@ -14,7 +14,11 @@ pub struct ProjectUsage {
 
 impl ProjectUsage {
     pub fn total_operations(&self) -> u64 {
-        self.kv_reads + self.kv_writes + self.vector_upserts + self.vector_searches + self.token_operations
+        self.kv_reads
+            + self.kv_writes
+            + self.vector_upserts
+            + self.vector_searches
+            + self.token_operations
     }
 }
 
@@ -49,7 +53,10 @@ impl MeteringEngine {
             token_operations: 14_300,
             storage_bytes: 48_500_000, // 48.5 MB
         };
-        engine.usage_map.get_mut().insert("proj_live_01".to_string(), default_usage);
+        engine
+            .usage_map
+            .get_mut()
+            .insert("proj_live_01".to_string(), default_usage);
 
         engine
     }

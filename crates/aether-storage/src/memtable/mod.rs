@@ -21,11 +21,12 @@ impl MemTable {
     }
 
     pub fn put(&self, key: Vec<u8>, value: ValueState) {
-        let size_bytes = key.len() + match &value {
-            ValueState::Some(v) => v.len(),
-            ValueState::Tombstone => 1,
-            ValueState::Intent { value, .. } => value.as_ref().map_or(0, |v| v.len()) + 32,
-        };
+        let size_bytes = key.len()
+            + match &value {
+                ValueState::Some(v) => v.len(),
+                ValueState::Tombstone => 1,
+                ValueState::Intent { value, .. } => value.as_ref().map_or(0, |v| v.len()) + 32,
+            };
         self.list.insert(key, value, size_bytes);
     }
 

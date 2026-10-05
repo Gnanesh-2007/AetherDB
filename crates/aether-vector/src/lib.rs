@@ -1,3 +1,3 @@
 pub mod hnsw;
 
-pub use hnsw::{HnswIndex, ConcurrentHnswIndex, NodeId};
+pub use hnsw::{ConcurrentHnswIndex, HnswIndex, NodeId};

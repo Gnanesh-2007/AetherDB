@@ -1,10 +1,10 @@
 pub mod metrics;
 
+use clap::Parser;
+use rand::Rng;
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
-use clap::Parser;
-use rand::Rng;
 use tempfile::tempdir;
 
 use aether_core::hlc::HybridLogicalClock;
@@ -43,7 +43,13 @@ fn bench_kv_writes(num_ops: usize) {
     }
     let elapsed = start.elapsed();
 
-    let report = hist.report(&format!("Workload A: Single-Thread Persistent Writes ({} ops)", num_ops), elapsed);
+    let report = hist.report(
+        &format!(
+            "Workload A: Single-Thread Persistent Writes ({} ops)",
+            num_ops
+        ),
+        elapsed,
+    );
     print_report(&report);
 }
 
@@ -80,7 +86,10 @@ fn bench_concurrent_kv_writes(num_ops: usize, concurrency: usize) {
     let elapsed = start.elapsed();
 
     let report = combined_hist.report(
-        &format!("Workload A2: Concurrent Writes ({} threads, {} ops)", concurrency, num_ops),
+        &format!(
+            "Workload A2: Concurrent Writes ({} threads, {} ops)",
+            concurrency, num_ops
+        ),
         elapsed,
     );
     print_report(&report);
@@ -113,7 +122,13 @@ fn bench_kv_reads(num_ops: usize) {
     }
     let elapsed = start.elapsed();
 
-    let report = hist.report(&format!("Workload B: Point Reads from SSTables/MemTable ({} ops)", num_ops), elapsed);
+    let report = hist.report(
+        &format!(
+            "Workload B: Point Reads from SSTables/MemTable ({} ops)",
+            num_ops
+        ),
+        elapsed,
+    );
     print_report(&report);
 }
 
@@ -187,7 +202,10 @@ fn bench_acid_transactions(num_txns: usize) {
     let elapsed = start.elapsed();
 
     let report = hist.report(
-        &format!("Workload D: Distributed 2PC Multi-Key ACID Transactions ({} txns)", num_txns),
+        &format!(
+            "Workload D: Distributed 2PC Multi-Key ACID Transactions ({} txns)",
+            num_txns
+        ),
         elapsed,
     );
     print_report(&report);
@@ -242,4 +260,3 @@ fn main() {
 
     println!("✔ All Empirical Benchmarks completed successfully.\n");
 }
-

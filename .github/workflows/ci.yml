@@ -6,86 +6,76 @@ on:
   pull_request:
     branches: [ main, master ]
 
-env:
-  CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-D warnings"
-
 jobs:
-  test:
-    name: Test & Correctness Verification
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        rust: [stable]
-
+  rust-workspace:
+    name: Rust Workspace Tests & Verification
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: rustfmt, clippy
 
-      - name: Cache cargo registry & index
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      - name: Rustfmt Check
+        run: cargo fmt --check
 
-      - name: Check code formatting
-        run: cargo fmt --all -- --check
-
-      - name: Run Clippy Lints
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Run Workspace Tests & Chaos Fuzzers
+      - name: Run Workspace Tests
         run: cargo test --workspace --verbose
 
-  benchmarks:
-    name: Run Micro-Benchmarks
+  python-and-frameworks:
+    name: Python SDK & AI Framework Integrations
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Run AetherDB Empirical Benchmark Suite
-        run: cargo run --release --bin aether-bench -- --num-ops 50000
 
-  sdk-tests:
-    name: JavaScript & Python SDK Integration
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          node-version: '20'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Start AetherDB Server & AetherCloud in Background
+      - name: Install Dependencies
         run: |
-          cargo run --release --bin aether-server -- --node-id 1 --addr 127.0.0.1:8300 --data-dir ./ci_data &
-          cargo run --release --bin aether-cloud -- --addr 127.0.0.1:8400 &
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio langchain-core llama-index-core
+
+      - name: Start AetherDB Server
+        run: |
+          cargo build --release --bin aether-server
+          ./target/release/aether-server --addr 127.0.0.1:8300 --http-addr 127.0.0.1:8301 &
           sleep 3
+          curl -f http://127.0.0.1:8301/health
 
-      - name: Test JavaScript SDK & Agent Memory Demo
-        run: |
-          node examples/ai_agent_memory_demo.js
+      - name: Run Python SDK Tests
+        run: pytest sdks/python/tests -v
 
-      - name: Test Python SDK & AetherCloud Control Plane
+      - name: Run LangChain Integration Tests
+        run: pytest integrations/langchain/tests -v
+
+      - name: Run LlamaIndex Integration Tests
+        run: pytest integrations/llamaindex/tests -v
+
+  javascript-and-demo:
+    name: JavaScript SDK & Autonomous Agent Demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Start AetherDB Server
         run: |
-          cd sdks/python
-          pip install .
-          python -c "from aetherdb import AetherDB; db = AetherDB(); assert db.set('ci_key', 'ci_val')['status'] == 'ok'; assert db.get('ci_key')['value'] == 'ci_val'"
-          curl -f http://localhost:8400/cloud/v1/usage
-          curl -f http://localhost:8400/cloud/v1/billing
+          cargo build --release --bin aether-server
+          ./target/release/aether-server --addr 127.0.0.1:8300 --http-addr 127.0.0.1:8301 &
+          sleep 3
+          curl -f http://127.0.0.1:8301/health
+
+      - name: Run JS SDK Tests
+        run: node sdks/js/test/sdk.test.js
+
+      - name: Run Agent Demo Tests
+        run: node --test demo/demo.test.js

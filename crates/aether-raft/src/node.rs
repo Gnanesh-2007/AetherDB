@@ -1,7 +1,7 @@
-use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
 use crate::log::{RaftLog, RaftLogEntry};
 use crate::state::{RaftRole, RaftState};
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestVoteArgs {

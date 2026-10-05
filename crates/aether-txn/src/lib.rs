@@ -1,5 +1,5 @@
-pub mod mvcc;
 pub mod coordinator;
+pub mod mvcc;
 
-pub use mvcc::MvccEngine;
 pub use coordinator::TxnCoordinator;
+pub use mvcc::MvccEngine;
