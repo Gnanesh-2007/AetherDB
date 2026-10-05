@@ -1,5 +1,5 @@
 [package]
-name = "aether-storage"
+name = "aether-vector"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -8,14 +8,10 @@ license.workspace = true
 [dependencies]
 aether-core = { path = "../aether-core" }
 aether-simd = { path = "../aether-simd" }
-aether-vector = { path = "../aether-vector" }
-bytes.workspace = true
-crossbeam.workspace = true
-parking_lot.workspace = true
-crc32fast.workspace = true
 serde.workspace = true
-bincode.workspace = true
-thiserror.workspace = true
-tempfile.workspace = true
+serde_json.workspace = true
+parking_lot.workspace = true
 rand.workspace = true
+thiserror.workspace = true
 tracing.workspace = true
+bincode.workspace = true

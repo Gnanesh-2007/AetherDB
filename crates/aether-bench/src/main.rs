@@ -193,6 +193,39 @@ fn bench_acid_transactions(num_txns: usize) {
     print_report(&report);
 }
 
+fn bench_hnsw_vector_search(num_vectors: usize, num_queries: usize, dim: usize) {
+    let mut rng = rand::thread_rng();
+    let mut index = aether_vector::HnswIndex::new(16, 64, 32);
+
+    // Populate HNSW index
+    for i in 0..num_vectors {
+        let v: Vec<f32> = (0..dim).map(|_| rng.gen_range(-1.0..1.0)).collect();
+        let id = format!("vec_{:06}", i);
+        index.insert(&id, v, None).unwrap();
+    }
+
+    let query: Vec<f32> = (0..dim).map(|_| rng.gen_range(-1.0..1.0)).collect();
+    let mut hist = LatencyHistogram::with_capacity(num_queries);
+
+    let start = Instant::now();
+    for _ in 0..num_queries {
+        let op_start = Instant::now();
+        let results = index.search(&query, 5);
+        hist.record(op_start.elapsed());
+        assert!(!results.is_empty());
+    }
+    let elapsed = start.elapsed();
+
+    let report = hist.report(
+        &format!(
+            "Workload E: HNSW Graph Vector Retrieval ({} vectors, {}-dim, Top-5, {} queries)",
+            num_vectors, dim, num_queries
+        ),
+        elapsed,
+    );
+    print_report(&report);
+}
+
 fn main() {
     let args = Args::parse();
 
@@ -203,8 +236,10 @@ fn main() {
     bench_kv_writes(args.num_ops);
     bench_concurrent_kv_writes(args.num_ops, args.concurrency);
     bench_kv_reads(args.num_ops);
-    bench_simd_vector_search(10000, 100, args.vector_dim);
+    bench_simd_vector_search(5000, 100, args.vector_dim);
+    bench_hnsw_vector_search(5000, 500, args.vector_dim);
     bench_acid_transactions(args.num_ops / 2);
 
-    println!("✔ All Phase 2 Benchmarks completed successfully.\n");
+    println!("✔ All Empirical Benchmarks completed successfully.\n");
 }
+

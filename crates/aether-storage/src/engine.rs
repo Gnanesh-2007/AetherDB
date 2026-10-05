@@ -1,10 +1,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use parking_lot::{Mutex, RwLock};
 
 use aether_core::error::{AetherError, Result};
 use aether_core::types::ValueState;
+use aether_vector::ConcurrentHnswIndex;
+use crate::cache::BlockCache;
+use crate::compaction::Compactor;
 use crate::memtable::MemTable;
 use crate::sstable::{SSTableReader, SSTableWriter};
 use crate::wal::WriteAheadLog;
@@ -16,6 +20,8 @@ pub struct StorageEngine {
     wal: Mutex<WriteAheadLog>,
     sstables: RwLock<Vec<PathBuf>>,
     next_sstable_id: AtomicU64,
+    hnsw_index: Arc<ConcurrentHnswIndex>,
+    block_cache: Arc<BlockCache>,
 }
 
 impl StorageEngine {
@@ -27,7 +33,18 @@ impl StorageEngine {
         let recovered_entries = WriteAheadLog::recover(&wal_path)?;
 
         let memtable = MemTable::new(4 * 1024 * 1024); // 4MB default
+        let hnsw_index = Arc::new(ConcurrentHnswIndex::new(16, 64, 32));
+        let block_cache = Arc::new(BlockCache::new(4096)); // 4096 blocks (16MB cache)
+
         for (k, v) in recovered_entries {
+            if k.starts_with(b"__vec:") {
+                if let ValueState::Some(bytes) = &v {
+                    if let Ok((vec, meta)) = bincode::deserialize::<(Vec<f32>, Option<String>)>(bytes) {
+                        let id = String::from_utf8_lossy(&k[6..]).to_string();
+                        let _ = hnsw_index.insert(&id, vec, meta);
+                    }
+                }
+            }
             memtable.put(k, v);
         }
 
@@ -59,6 +76,8 @@ impl StorageEngine {
             wal: Mutex::new(wal),
             sstables: RwLock::new(sstables),
             next_sstable_id: AtomicU64::new(max_id + 1),
+            hnsw_index,
+            block_cache,
         })
     }
 
@@ -120,7 +139,7 @@ impl StorageEngine {
         Ok(None)
     }
 
-    /// Multi-tier point lookup: Active MemTable -> Immutable MemTable -> SSTables on disk (newest to oldest).
+    /// Point lookup for latest key value across MemTable, Immutable MemTable, and SSTables.
     pub fn get(&self, key: &[u8]) -> Result<Option<ValueState>> {
         // 1. Check Active MemTable
         if let Some(val) = self.active_memtable.read().get(key) {
@@ -134,7 +153,7 @@ impl StorageEngine {
             }
         }
 
-        // 3. Search SSTables from newest to oldest
+        // 3. Check SSTables (newest to oldest)
         let sstables = self.sstables.read().clone();
         for sst_path in sstables.iter().rev() {
             let mut reader = SSTableReader::open(sst_path)?;
@@ -146,21 +165,15 @@ impl StorageEngine {
         Ok(None)
     }
 
-    /// Flushes the active MemTable to an immutable SSTable file on disk.
+    /// Flushes Active MemTable to a new Immutable SSTable file on disk.
     pub fn flush_active_memtable(&self) -> Result<()> {
-        let entries = {
-            let mut active = self.active_memtable.write();
-            let entries = active.iter();
-            *active = MemTable::new(active.max_size_bytes);
-            entries
-        };
-
+        let entries: Vec<(Vec<u8>, ValueState)> = self.active_memtable.read().iter();
         if entries.is_empty() {
             return Ok(());
         }
 
         let sst_id = self.next_sstable_id.fetch_add(1, Ordering::SeqCst);
-        let sst_path = self.data_dir.join(format!("{:06}.sst", sst_id));
+        let sst_path = self.data_dir.join(format!("{:05}.sst", sst_id));
 
         let mut writer = SSTableWriter::create(&sst_path)?;
         for (k, v) in entries {
@@ -168,8 +181,38 @@ impl StorageEngine {
         }
         writer.finish()?;
 
+        // Reset Active MemTable
+        {
+            let mut active = self.active_memtable.write();
+            *active = MemTable::new(4 * 1024 * 1024);
+        }
+
         self.sstables.write().push(sst_path);
         Ok(())
+    }
+
+    /// Merges all existing SSTables into a single compacted SSTable, purging tombstones and old MVCC versions.
+    pub fn trigger_compaction(&self) -> Result<Option<PathBuf>> {
+        let current_sstables = self.sstables.read().clone();
+        if current_sstables.len() < 2 {
+            return Ok(None);
+        }
+
+        let compacted_id = self.next_sstable_id.fetch_add(1, Ordering::SeqCst);
+        let compacted_path = self.data_dir.join(format!("{:05}_compacted.sst", compacted_id));
+
+        let result = Compactor::compact(&current_sstables, &compacted_path)?;
+        if let Some(final_path) = result {
+            let mut sstables_lock = self.sstables.write();
+            *sstables_lock = vec![final_path.clone()];
+            self.block_cache.clear();
+            Ok(Some(final_path))
+        } else {
+            let mut sstables_lock = self.sstables.write();
+            sstables_lock.clear();
+            self.block_cache.clear();
+            Ok(None)
+        }
     }
 
     /// Atomic integer increment (used for token quotas, rate limiters, sequence counters).
@@ -187,17 +230,36 @@ impl StorageEngine {
         Ok(new_val)
     }
 
-    /// Stores a high-dimensional vector with optional JSON metadata.
+    /// Stores a high-dimensional vector with optional JSON metadata into both LSM storage and HNSW graph index.
     pub fn upsert_vector(&self, id: &str, vector: Vec<f32>, metadata: Option<String>) -> Result<()> {
         let key = format!("__vec:{}", id).into_bytes();
-        let payload = (vector, metadata);
+        let payload = (vector.clone(), metadata.clone());
         let val_bytes = bincode::serialize(&payload)
             .map_err(|e| AetherError::SerializationError(e.to_string()))?;
-        self.put(key, ValueState::Some(val_bytes))
+
+        // 1. Persistent durable store in LSM-Tree
+        self.put(key, ValueState::Some(val_bytes))?;
+
+        // 2. Insert into HNSW graph index for sub-millisecond retrieval
+        self.hnsw_index.insert(id, vector, metadata)?;
+        Ok(())
+    }
+
+    /// High-performance Vector search utilizing HNSW graph indexing when available, with flat scan fallback.
+    pub fn search_vector(&self, query_vector: &[f32], top_k: usize) -> Result<Vec<(String, f32, Option<String>)>> {
+        if !self.hnsw_index.is_empty() {
+            let results = self.hnsw_index.search(query_vector, top_k);
+            if !results.is_empty() {
+                return Ok(results);
+            }
+        }
+
+        // Fallback: Exact Flat SIMD Brute-Force scan over MemTable
+        self.search_vector_flat(query_vector, top_k)
     }
 
     /// Exact SIMD-accelerated Cosine Nearest Neighbor search over stored vectors.
-    pub fn search_vector(&self, query_vector: &[f32], top_k: usize) -> Result<Vec<(String, f32, Option<String>)>> {
+    pub fn search_vector_flat(&self, query_vector: &[f32], top_k: usize) -> Result<Vec<(String, f32, Option<String>)>> {
         let mut candidates = Vec::new();
 
         // Scan all vector entries from active MemTable
@@ -252,10 +314,35 @@ mod tests {
         // Force flush to SSTable on disk
         engine.flush_active_memtable().unwrap();
 
-        // Read back from SSTable
+        // Verify retrieval directly from SSTable
         assert_eq!(
             engine.get(b"user:01").unwrap(),
             Some(ValueState::Some(b"alice".to_vec()))
         );
+    }
+
+    #[test]
+    fn test_storage_engine_hnsw_and_compaction() {
+        let dir = tempdir().unwrap();
+        let engine = StorageEngine::open(dir.path()).unwrap();
+
+        // 1. Vector Upsert & HNSW Search
+        engine.upsert_vector("doc_1", vec![1.0, 0.0, 0.0, 0.0], Some("meta1".into())).unwrap();
+        engine.upsert_vector("doc_2", vec![0.9, 0.1, 0.0, 0.0], Some("meta2".into())).unwrap();
+
+        let search_res = engine.search_vector(&[0.95, 0.05, 0.0, 0.0], 2).unwrap();
+        assert_eq!(search_res.len(), 2);
+        assert_eq!(search_res[0].0, "doc_1");
+
+        // 2. Compaction trigger
+        engine.put(b"k1".to_vec(), ValueState::Some(b"v1".to_vec())).unwrap();
+        engine.flush_active_memtable().unwrap();
+
+        engine.put(b"k1".to_vec(), ValueState::Some(b"v1_new".to_vec())).unwrap();
+        engine.flush_active_memtable().unwrap();
+
+        let comp_res = engine.trigger_compaction().unwrap();
+        assert!(comp_res.is_some());
+        assert_eq!(engine.get(b"k1").unwrap(), Some(ValueState::Some(b"v1_new".to_vec())));
     }
 }

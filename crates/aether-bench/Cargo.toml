@@ -14,6 +14,7 @@ aether-core = { path = "../aether-core" }
 aether-storage = { path = "../aether-storage" }
 aether-txn = { path = "../aether-txn" }
 aether-simd = { path = "../aether-simd" }
+aether-vector = { path = "../aether-vector" }
 aether-network = { path = "../aether-network" }
 tokio.workspace = true
 clap.workspace = true
