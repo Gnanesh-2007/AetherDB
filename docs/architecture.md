@@ -8,7 +8,7 @@
 
 Autonomous AI agents require a fundamentally different storage substrate than traditional relational OLTP databases or standalone vector indices. They require:
 - **Crash-Consistent Structured State:** Epistemic task progress, scratchpad context, and execution status.
-- **Hardware-Atomic Execution Counters:** Lock-free tracking of LLM tokens, step limits, and rate quotas.
+- **Concurrent Atomic Execution Counters:** Concurrency-safe atomic tracking of LLM tokens, step limits, and rate quotas.
 - **Persistent Semantic Memory:** Sub-millisecond vector similarity search paired with structured canonical metadata.
 - **Distributed Replication & Transactions:** Multi-Raft consensus sharding with Snapshot Isolation (MVCC) and Two-Phase Commit (2PC).
 
@@ -88,9 +88,9 @@ flowchart TD
   2. **Hierarchical Navigable Small World (HNSW) Index:** Vector embeddings are inserted into an in-memory graph index (`aether-vector`) partitioned by tenant and agent prefix.
 - **Hardware-Accelerated Similarity Search:** Distance computations utilize zero-copy AVX2/FMA vector dot product and cosine similarity SIMD routines (`aether-simd`), processing 4096-dimensional vectors in sub-millisecond latencies.
 
-### 2.3 Hardware-Atomic Token Accounting (`agent.state.incr`)
-- Token quotas, cost microcents, and step loops are incremented via single-key WAL serialization and atomic in-memory CAS primitives.
-- Ensures linearizability under high-concurrency multi-threaded agent execution loops without heavy distributed locks.
+### 2.3 Concurrent Atomic Token Accounting (`agent.state.incr`)
+- Token quotas, cost microcents, and step loops are incremented via atomic in-memory serialization and Write-Ahead Log records.
+- Guarantees concurrency safety and zero lost updates under multi-threaded agent execution loops.
 
 ### 2.4 Distributed Multi-Raft & Transactions
 - **Multi-Raft Consensus:** The key space is sharded into dynamic key ranges, each governed by an independent Raft consensus group.

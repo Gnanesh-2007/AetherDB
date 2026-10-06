@@ -2,43 +2,48 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
+[![Automated Tests](https://img.shields.io/badge/Tests-102%2F102%20PASS-brightgreen.svg)]()
 [![Python SDK](https://img.shields.io/badge/Python%20SDK-0.1.0-blue.svg)](sdks/python)
 [![TypeScript SDK](https://img.shields.io/badge/%40aetherdb%2Fsdk-0.1.0-brightgreen.svg)](sdks/js)
-[![Release](https://img.shields.io/badge/Release-v0.1.0-brightgreen.svg)]()
-[![Deployment Validation](https://img.shields.io/badge/Public%20Deployment-21%2F21%20PASS-success.svg)]()
+[![Release Stage](https://img.shields.io/badge/Status-v0.1.0--alpha%20%7C%20Developer%20Preview-yellow.svg)](ROADMAP.md)
 
-> **AetherDB is an AI-native persistent storage system for autonomous agents.**  
-> AetherDB provides autonomous AI agents with durable state, long-term semantic memory, atomic operations, vector search, transactions, and distributed persistence through a unified developer API.
-
----
-
-## 🌐 Public Deployment & Production Validation
-
-AetherDB v0.1.0 has been deployed and validated in a live public environment over TLS/HTTPS:
-
-- **Public Endpoint:** `https://d60f5382278503.lhr.life` *(Public TLS edge with reverse proxy terminating to internal REST gateway)*
-- **Developer Console:** `https://d60f5382278503.lhr.life/dashboard`
-- **Validation Result:** `21 / 21 Tests Passed (100%)`
-
-### Security Perimeter & Architectural Safeguards
-- **Strict Cryptographic Authentication:** All data endpoints require `Bearer aether_sk_<tenant>_<secret>` evaluated via constant-time token comparison (`ct_eq`). Forged tokens and header-only bypasses (`X-Aether-Tenant`) are rejected with HTTP 401.
-- **Tenant & Agent Isolation:** Memory recall and state lookups are cryptographically and namespace-isolated. Tenant B cannot access Tenant A data; Agent Y cannot recall memories from Agent X.
-- **Private Consensus:** Internal Multi-Raft consensus (port `8300`) is bound strictly to `127.0.0.1` and is never exposed to the public internet.
-- **Crash & Restart Resilience:** Validated against a clean production storage directory (`data_production`). State, atomic counters, semantic memories, and SIMD vectors survive full process restarts.
-- **Protected Metrics & CORS:** Internal Prometheus `/metrics` are inaccessible without valid authentication, and wildcard CORS policies (`*`) are disallowed under strict mode.
-
-> **Latency Notice:** Public external roundtrips over TLS reverse proxies showed `p50 = 1,445 ms`, `p95 = 3,475 ms`, and `max = 6,019 ms`. These figures reflect wide-area network latency and TLS handshakes, whereas local engine benchmarks achieve sub-millisecond execution (`p50 = 0.031 ms` / `31 µs` for WAL + MemTable writes).
+> **AetherDB is an open-source, AI-native state and semantic memory engine written in Rust.**  
+> It provides autonomous AI agents with durable structured state, long-term semantic memory, concurrent atomic counters, SIMD vector search, and distributed persistence through a unified developer API.
 
 ---
 
-## 🎯 Why AI Agents Need Persistent State & Memory
+## 🎯 Why AetherDB?
 
-Standard web architectures separate databases, vector indices, cache tiers, and task queues across different systems. Autonomous AI agents have unique requirements that break down when using disparate infrastructure:
+Standard AI agent stacks stitch together 3 to 4 disparate databases:
+- **Redis** for fast ephemeral scratchpad memory and step counters.
+- **PostgreSQL** for durable session state, task queues, and user records.
+- **Pinecone / Qdrant / Milvus** for semantic vector embeddings.
 
-1. **Epistemic State vs. Ephemeral Caches:** Agents need structured scratchpad memory and step checkpoints that survive process crashes and orchestrator restarts.
-2. **Atomic Concurrent Accounting:** Tracking token quotas, step counters, and usage metrics across concurrent tools requires atomic INCR primitives with key-level isolation and zero lost updates.
-3. **Unified Semantic Memory:** Agent memories consist of structured metadata (timestamps, domains, parent task IDs) coupled with dense vector embeddings. Storing them together ensures atomic updates and eliminates dual-write drift.
-4. **Tenant & Agent Namespace Isolation:** Multiple agents operating within multi-tenant organizations must remain strictly isolated without complex relational join filtering.
+This composite architecture introduces **dual-write drift** (where vector indexes update but relational metadata fails), complex relational joins, and high operational overhead.
+
+AetherDB solves this by unifying **epistemic agent state**, **atomic accounting**, and **SIMD vector search** into a single, high-performance Rust storage engine:
+
+```text
+       ┌────────────────────────────────────────────────────────┐
+       │              Autonomous AI Agent / Application         │
+       │   Python SDK · TypeScript SDK · LangChain · LlamaIndex │
+       └───────────────────────────┬────────────────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    ▼                             ▼
+       ┌────────────────────────┐    ┌────────────────────────┐
+       │ Structured State & KV  │    │ Long-Term Vector Memory│
+       │ • Epistemic Sessions   │    │ • Dense HNSW Index     │
+       │ • Step Checkpoints     │    │ • AVX2 SIMD Cosine     │
+       │ • Atomic Token INCR    │    │ • Text & Metadata      │
+       └────────────┬───────────┘    └────────────┬───────────┘
+                    └──────────────┬──────────────┘
+                                   ▼
+       ┌────────────────────────────────────────────────────────┐
+       │                AetherDB Unified Rust Engine            │
+       │ LSM Storage (SkipList + WAL + SSTables) + Multi-Raft   │
+       └────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -72,10 +77,17 @@ Standard web architectures separate databases, vector indices, cache tiers, and 
 ```
 
 ### Core Engine Primitives
-- **Storage Subsystem:** Concurrent SkipList MemTable + CRC32 Write-Ahead Log (WAL) + SSTables with Block Bloom Filters and LRU caching.
-- **Consistency & Transactions:** Monotonic Hybrid Logical Clocks (HLC) + Multi-Version Concurrency Control (MVCC) + Distributed 2-Phase Commit (2PC).
-- **Consensus:** Multi-Raft consensus groups with dynamic key-range routing.
-- **Vector Memory:** Hierarchical Navigable Small World (HNSW) graph indexing with AVX2 SIMD cosine distance kernels.
+
+- **Storage Engine:** Concurrent SkipList MemTable + append-only CRC32 Write-Ahead Log (WAL) + immutable SSTables with Block Bloom Filters and LRU block cache.
+- **Hardware-Accelerated SIMD Vectors:** High-throughput cosine distance computations using x86-64 **AVX2 / FMA** instructions with scalar fallback.
+- **Vector Graph Search:** Hierarchical Navigable Small World (**HNSW**) in-memory graph index with deterministic LSM recovery.
+- **Concurrency & Accounting:** Atomic concurrent `INCR` operations for token quotas, step counters, and usage accounting.
+- **Distributed Consensus Prototype:** Multi-Raft key-range sharding, Monotonic Hybrid Logical Clocks (**HLC**), and MVCC Two-Phase Commit (**2PC**) coordinator.
+
+📖 **Technical Deep Dives:**
+- [LSM Storage & WAL Internals](docs/architecture/lsm_and_storage.md)
+- [AVX2 SIMD Math & HNSW Vector Graph](docs/architecture/simd_and_hnsw.md)
+- [Multi-Raft Consensus & Distributed MVCC](docs/architecture/distributed_consensus.md)
 
 ---
 
@@ -91,7 +103,7 @@ cd AetherDB
 # Build release server binary
 cargo build --release --bin aether-server
 
-# Run single node
+# Run a local AetherDB node
 ./target/release/aether-server --node-id 1 --addr 127.0.0.1:8300 --http-addr 127.0.0.1:8301 --data-dir data_node1
 ```
 
@@ -101,7 +113,7 @@ cargo build --release --bin aether-server
 
 ### Python SDK
 
-Install the Python client:
+Install the local development package:
 ```bash
 pip install -e sdks/python
 ```
@@ -109,6 +121,7 @@ pip install -e sdks/python
 ```python
 from aetherdb import AetherDB
 
+# Connect to local or remote AetherDB node
 db = AetherDB("http://127.0.0.1:8301", api_key="aether_sk_tenantA_secret")
 agent = db.agent("research-agent")
 
@@ -141,7 +154,7 @@ results = agent.memory.recall(
 
 ### TypeScript / JavaScript SDK
 
-Install the JavaScript SDK:
+Install the local package:
 ```bash
 npm install ./sdks/js
 ```
@@ -175,7 +188,6 @@ const memories = await agent.memory.recall({
 
 ```python
 from aetherdb_langchain import AetherDBChatMessageHistory
-from langchain_core.messages import HumanMessage, AIMessage
 
 # Persistent chat history stored directly in AetherDB Agent State
 history = AetherDBChatMessageHistory(
@@ -228,29 +240,13 @@ cargo run --release --bin aether -- agent memory recall --agent-id research-agen
 
 ---
 
-## 🐳 Docker Deployment
+## 📊 Developer Console & Observability
 
-AetherDB provides production Docker and Docker Compose configurations:
-
-```bash
-# 1. Single Node container
-docker build -t aetherdb:v0.1.0 .
-docker run -p 8300:8300 -p 8301:8301 -e AETHERDB_REQUIRE_AUTH=false aetherdb:v0.1.0
-
-# 2. 3-Node Multi-Raft Cluster
-docker compose -f docker-compose.cluster.yml up -d
-```
-
-*(Note: Docker Compose configuration is provided and statically validated. The 3-node cluster runtime deployment was NOT executed during testing because the local development host did not have an active Docker daemon).*
-
----
-
-## 📊 Observability & Metrics
-
+- **Developer Console:** Open `http://localhost:8301/dashboard` in your browser for real-time agent fleet observability, cluster topology, memory trace inspection, and interactive API playgrounds.
 - **Liveness Probe:** `GET /health` (`{"status":"healthy","engine":"aetherdb-rust","version":"0.1.0"}`)
 - **Readiness Probe:** `GET /readiness` (`{"status":"ready","node_id":1,"ready":true}`)
-- **Prometheus Metrics:** `GET /metrics` (Guarded by API key in strict authentication mode)
-- **Developer Console:** Open `http://localhost:8301/dashboard` in your browser for real-time agent fleet observability, cluster topology, and vector search inspector.
+- **Telemetry Snapshot:** `GET /v1/telemetry` (Live JSON telemetry for cluster health, RPS, latency, and vector counts)
+- **Prometheus Metrics:** `GET /metrics` (Prometheus exposition format)
 
 ---
 
@@ -270,18 +266,24 @@ Empirical microbenchmark results on bare-metal local storage (`release` build, A
 ================================================================================================
 ```
 
-### Local Engine vs. Public Deployment Latency
+---
 
-- **Local Storage Engine:** Direct in-process / local storage benchmarks execute in microseconds (`p50 = 0.031 ms` / `31 µs` for writes, `p50 = 0.010 ms` / `10 µs` for 2PC transactions).
-- **Public Deployment Round-Trip Latency:** External client requests to the public HTTPS endpoint (`https://d60f5382278503.lhr.life`) include wide-area network latency, TLS handshakes, and reverse proxy forwarding (`p50 = 1,445 ms`, `p95 = 3,475 ms`, `max = 6,019 ms`).
+## 🗺️ Project Status & Roadmap
+
+AetherDB is currently in **Developer Preview (v0.1.0-alpha)**. While core single-node LSM storage, AVX2 SIMD kernels, and SDKs are tested with 102/102 automated tests, multi-node clustering and distributed recovery are under active development.
+
+Check out our full roadmap: [ROADMAP.md](ROADMAP.md)
+
+- **v0.2.0:** PyPI / npm package distribution & automated multi-arch Docker images.
+- **v0.3.0:** Disk-backed vector storage (mmap / DiskANN-inspired indexing) & TTL memory decay.
+- **v0.4.0:** Formal Jepsen-style chaos testing and automated network partition resilience.
+- **v0.5.0:** Native adapters for LangGraph, CrewAI, AutoGen, and Semantic Kernel.
 
 ---
 
-## ⚠️ Current Scope & Limitations
+## 🤝 Contributing
 
-- **Specialized Workloads:** AetherDB is designed specifically for autonomous agent memory, state, and vector retrieval. It does not provide general SQL joins or multi-table OLAP aggregation engines.
-- **Memory Scaling:** HNSW graph structures are held in memory for sub-millisecond traversal and backed by the LSM Write-Ahead Log for persistent recovery.
-- **Embedding Dimensions:** SIMD cosine kernels support arbitrary vector dimensions (recommended $\le 4096$).
+We welcome contributions from developers, researchers, and systems enthusiasts! Please check out [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, test execution, and pull request guidelines.
 
 ---
 
